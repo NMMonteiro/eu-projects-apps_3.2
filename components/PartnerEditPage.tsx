@@ -4,13 +4,13 @@ import { DeleteConfirmDialog } from '@/components/ui/delete-confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/primitives';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { serverUrl, publicAnonKey } from '../utils/supabase/info';
-import type { Partner } from '../types/partner';
+import { type Partner, ORGANIZATION_TYPES } from '../types/partner';
+import { Label, Select } from '@/components/ui/primitives';
 
 interface PartnerEditPageProps {
     partnerId: string | null;
@@ -238,11 +238,23 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                         </div>
                         <div>
                             <Label>Organization Type</Label>
-                            <Input
+                            <Select
                                 value={partner.organizationType || ''}
-                                onChange={(e) => updateField('organizationType', e.target.value)}
-                                placeholder="University, SME, Research Institute, etc."
-                            />
+                                onChange={(e) => updateField('organizationType', (e.target as HTMLSelectElement).value)}
+                                className="w-full"
+                            >
+                                <option value="" disabled>Select organisation type...</option>
+                                {ORGANIZATION_TYPES.map(type => (
+                                    <option key={type} value={type} className="bg-card text-foreground">
+                                        {type}
+                                    </option>
+                                ))}
+                                {partner.organizationType && !ORGANIZATION_TYPES.includes(partner.organizationType) && (
+                                    <option value={partner.organizationType} className="bg-card text-primary font-medium">
+                                        {partner.organizationType} (Extracted)
+                                    </option>
+                                )}
+                            </Select>
                         </div>
                     </div>
 

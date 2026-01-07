@@ -900,7 +900,36 @@ Return ONLY valid JSON, no other text.`;
                 - Organisation ID (OID or PIC number)
                 - VAT Number (VAT)
                 - Business Registration ID (National ID)
-                - Organization Type (University, SME, NGO, Research Institute, etc.)
+                - Organization Type. CRITICAL: You MUST map the organization type to EXACTLY ONE of the following permitted values (case-sensitive):
+                  * Accreditation, certification or qualification body
+                  * Counselling body
+                  * European grouping of territorial cooperation
+                  * European or international public body
+                  * Foundation
+                  * Higher education institution (tertiary level)
+                  * Large enterprise
+                  * Local Public body
+                  * National Public body
+                  * National Youth Council
+                  * Non-governmental organisation/association
+                  * Organisation or association representing (parts of) the sport sector
+                  * Public service provider
+                  * Regional Public body
+                  * Research Institute/Centre
+                  * School/Institute/Educational centre – Adult education
+                  * School/Institute/Educational centre – General education (pre-primary level)
+                  * School/Institute/Educational centre – General education (primary level)
+                  * School/Institute/Educational centre – General education (secondary level)
+                  * School/Institute/Educational centre – Vocational Training (secondary level)
+                  * School/Institute/Educational centre – Vocational Training (tertiary level)
+                  * Small and medium sized enterprise
+                  * Social enterprise
+                  * Social partner or other representative of working life (chambers of commerce, trade union, trade association)
+                  * Sport club
+                  * Sport federation
+                  * Sport league
+                  * Youth organisation
+                  If the value is not found or not clear, pick the most logically similar one from this list. Do not use any other values.
                 - Public Body (boolean) and Non-profit (boolean) status
                 - Legal Address (Street), City, Postcode, Country, Region
                 - Department or Unit name
