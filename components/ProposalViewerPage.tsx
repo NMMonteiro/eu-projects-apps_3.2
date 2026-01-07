@@ -697,11 +697,32 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         );
     }
 
-    // Build sections array including custom sections
-    let baseSections: { id: string; title: string; content: string | undefined }[] = [];
+    // Build sections array including custom sections and aligning with funding scheme template
+    let baseSections: { id: string; title: string; content: string | undefined; type?: string }[] = [];
+    const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
+    const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
 
-    if (proposal.dynamic_sections && Object.keys(proposal.dynamic_sections).length > 0) {
-        baseSections = Object.entries(proposal.dynamic_sections).map(([key, content], idx) => ({
+    if (fundingScheme?.template_json?.sections) {
+        // Function to recursively flatten template sections
+        const processTemplateSections = (templateSections: any[], prefix = ''): any[] => {
+            let flattened: any[] = [];
+            [...templateSections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
+                flattened.push({
+                    id: ts.key,
+                    title: ts.label, // Template labels usually already have numbering like "1. Objectives"
+                    content: dynamicSections[ts.key],
+                    type: ts.type
+                });
+                if (ts.subsections && ts.subsections.length > 0) {
+                    flattened = [...flattened, ...processTemplateSections(ts.subsections, ts.label)];
+                }
+            });
+            return flattened;
+        };
+
+        baseSections = processTemplateSections(fundingScheme.template_json.sections);
+    } else if (Object.keys(dynamicSections).length > 0) {
+        baseSections = Object.entries(dynamicSections).map(([key, content], idx) => ({
             id: key,
             title: `${idx + 1}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
             content: content as string

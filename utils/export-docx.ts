@@ -62,11 +62,9 @@ function createParagraph(text: string, options: { bold?: boolean; color?: string
 
 /**
  * Robustly splits squashed labels. 
- * E.g. "RPGProject Title:" -> "RPG\nProject Title:"
  */
 function fixSquashedText(text: string): string {
   // Pattern: [lowercase|digit|bracket|parenthesis] followed by [Uppercase + lowercase + rest of label + colon]
-  // This avoids splitting (EUR): or acronyms like RPG.
   return text.replace(/([a-z0-9\]\)])(?=[A-Z][a-z][a-zA-Z0-9\s\-\/\(\)\°]{2,60}:)/g, "$1\n");
 }
 
@@ -400,9 +398,71 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     docChildren.push(createSectionHeader("0. Executive Summary", 2));
     docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary"));
 
-    // 3. DYNAMIC NARRATIVE SECTIONS
-    const dyn = p.dynamicSections || (p as any).dynamic_sections;
-    if (dyn && Object.keys(dyn).length > 0) {
+    // 3. DYNAMIC NARRATIVE SECTIONS (Following Template if available)
+    const dyn = p.dynamicSections || (p as any).dynamic_sections || {};
+    const templateSections = fScheme?.template_json?.sections;
+
+    if (templateSections && templateSections.length > 0) {
+      // Recursive function to process template sections and subsections
+      const processSectionsObject = (sectionsArr: any[]) => {
+        [...sectionsArr].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
+          const content = dyn[ts.key];
+          const title = ts.label;
+          const lowerKey = ts.key.toLowerCase();
+          const lowerTitle = title.toLowerCase();
+
+          docChildren.push(createSectionHeader(title, 2));
+
+          // If it's a structured section or specifically for partners/WPs, prioritize structured data
+          const isPartnerSection = lowerKey.includes('partner') || lowerKey.includes('participating') || lowerTitle.includes('partner') || lowerTitle.includes('participating');
+          const isWPSection = lowerKey.includes('work_package') || lowerKey.includes('workpackage') || lowerTitle.includes('work package');
+          const isBudgetSection = lowerKey.includes('budget') || lowerTitle.includes('budget');
+
+          if (isPartnerSection && p.partners?.length > 0) {
+            // Section 18: Participating Organisations - show structured list
+            docChildren.push(createParagraph("Consortium Partner Details:", { bold: true, italic: true, color: COLOR_PRIMARY }));
+            p.partners.forEach((partner, pIdx) => {
+              docChildren.push(createParagraph(`${pIdx + 1}. ${partner.name}${partner.role ? ` (${partner.role})` : ''}`, { bold: true }));
+              const partnerDetails = [
+                `Country: ${partner.country || '-'}`,
+                `Type: ${partner.organizationType || '-'}`,
+                `PIC/OID: ${partner.pic || partner.organisationId || '-'}`,
+                `Website: ${partner.website || '-'}`
+              ];
+              partnerDetails.forEach(detail => docChildren.push(createSmartParagraph(detail)));
+              if (partner.description) {
+                docChildren.push(createParagraph("Description:", { italic: true, size: 18 }));
+                docChildren.push(...convertHtmlToParagraphs(partner.description));
+              }
+            });
+          } else if (isWPSection && p.workPackages?.length > 0) {
+            // Section 17: Work Packages
+            if (content) docChildren.push(...convertHtmlToParagraphs(content, title));
+            docChildren.push(createParagraph("Work Package Overview:", { bold: true, italic: true, color: COLOR_PRIMARY }));
+            docChildren.push(createWorkPackageTable(p.workPackages));
+          } else if (isBudgetSection && p.budget?.length > 0) {
+            // Budget Summary Section
+            if (content) docChildren.push(...convertHtmlToParagraphs(content, title));
+            docChildren.push(createParagraph("Detailed Budget Table:", { bold: true, italic: true, color: COLOR_PRIMARY }));
+            docChildren.push(createBudgetTable(p.budget, currency));
+          } else if (content) {
+            // Default narrative content
+            docChildren.push(...convertHtmlToParagraphs(content, title));
+          } else if (ts.type === 'structured') {
+            // Placeholders for other structured types if needed
+            docChildren.push(createParagraph("[Structured data section]", { italic: true, color: "999999" }));
+          }
+
+          // Handle subsections
+          if (ts.subsections && ts.subsections.length > 0) {
+            processSectionsObject(ts.subsections);
+          }
+        });
+      };
+
+      processSectionsObject(templateSections);
+    } else {
+      // Legacy Fallback / Flat iteration
       Object.entries(dyn).forEach(([key, content], idx) => {
         const title = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
         const lowerTitle = title.toLowerCase();
@@ -416,15 +476,17 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
           docChildren.push(createWorkPackageTable(p.workPackages));
         }
       });
-    } else {
-      // Legacy Fallback
-      ["relevance", "methods", "impact"].forEach((k, idx) => {
-        if ((p as any)[k]) {
-          const title = k.toUpperCase();
-          docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
-          docChildren.push(...convertHtmlToParagraphs((p as any)[k], title));
-        }
-      });
+
+      // If legacy fallback and no dynamic sections found
+      if (Object.keys(dyn).length === 0) {
+        ["relevance", "methods", "impact"].forEach((k, idx) => {
+          if ((p as any)[k]) {
+            const title = k.toUpperCase();
+            docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
+            docChildren.push(...convertHtmlToParagraphs((p as any)[k], title));
+          }
+        });
+      }
     }
 
     docChildren.push(new Paragraph({ children: [new PageBreak()] }));
@@ -601,7 +663,67 @@ export async function exportToDocx(proposal: FullProposal): Promise<void> {
     console.error("EXPORT FAILED", error);
     alert("Professional Export failed: " + (error as Error).message);
   }
+}// ============================================================================
+// TABLE HELPERS
+// ============================================================================
+
+function createBudgetTable(budget: any[], currency: string): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          createTableHeaderCell("Resource Item"),
+          createTableHeaderCell("Description"),
+          createTableHeaderCell(`Cost (${currency})`),
+        ]
+      }),
+      ...budget.map(item => new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.item, bold: true, font: FONT, size: BODY_SIZE })] })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.description || "-", font: FONT, size: BODY_SIZE })] })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `${item.cost.toLocaleString()} ${currency}`, font: FONT, size: BODY_SIZE })], alignment: AlignmentType.RIGHT })] }),
+        ]
+      }))
+    ],
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+    }
+  });
 }
 
-
+function createRiskTable(risks: any[]): Table {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          createTableHeaderCell("Risk"),
+          createTableHeaderCell("Impact"),
+          createTableHeaderCell("Mitigation Measures"),
+        ]
+      }),
+      ...risks.map(r => new TableRow({
+        children: [
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.risk, bold: true, font: FONT, size: BODY_SIZE })] })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.impact, font: FONT, size: BODY_SIZE })], alignment: AlignmentType.CENTER })] }),
+          new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.mitigation, font: FONT, size: BODY_SIZE })] })] }),
+        ]
+      }))
+    ],
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+    }
+  });
+}
 
