@@ -897,6 +897,9 @@ Return ONLY valid JSON, no other text.`;
                 - Legal Name and Acronym
                 - OID / PIC / Organisation ID
                 - VAT Number and Business Registration ID
+                - Organisation ID (OID or PIC number)
+                - VAT Number (VAT)
+                - Business Registration ID (National ID)
                 - Organization Type (University, SME, NGO, Research Institute, etc.)
                 - Public Body (boolean) and Non-profit (boolean) status
                 - Legal Address (Street), City, Postcode, Country, Region
@@ -906,13 +909,15 @@ Return ONLY valid JSON, no other text.`;
                 - Expertise, Experience, staff skills, and previous relevant projects
                 - Contact Person details (Name, Email, Phone, Role)
 
-                Return ONLY a valid JSON object:
+                Return ONLY a valid JSON object. 
+                CRITICAL: For fields where data is not found in the PDF, return an empty string "" instead of null or omitting the field.
+                
                 {
                   "name": "full legal name",
-                  "acronym": "acronym",
-                  "organisationId": "OID/PIC",
-                  "vatNumber": "VAT",
-                  "businessId": "Business ID",
+                  "acronym": "acronym (string or empty)",
+                  "organisationId": "OID/PIC (string or empty)",
+                  "vatNumber": "VAT (string or empty)",
+                  "businessId": "Business ID (string or empty)",
                   "organizationType": "SME/University/etc",
                   "isPublicBody": true/false,
                   "isNonProfit": true/false,

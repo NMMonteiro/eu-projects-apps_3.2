@@ -391,8 +391,9 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                         <Textarea
                             value={partner.experience || ''}
                             onChange={(e) => updateField('experience', e.target.value)}
-                            placeholder="Relevant experience and expertise..."
-                            rows={3}
+                            placeholder="Describe the organization's relevant experience and expertise in the field..."
+                            rows={9}
+                            className="resize-y"
                         />
                     </div>
 
@@ -401,8 +402,9 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                         <Textarea
                             value={partner.staffSkills || ''}
                             onChange={(e) => updateField('staffSkills', e.target.value)}
-                            placeholder="Key personnel and their relevant skills..."
-                            rows={3}
+                            placeholder="Summarize the key personnel and their relevant technical/administrative skills..."
+                            rows={6}
+                            className="resize-y"
                         />
                     </div>
 
@@ -411,8 +413,9 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                         <Textarea
                             value={partner.relevantProjects || ''}
                             onChange={(e) => updateField('relevantProjects', e.target.value)}
-                            placeholder="List some relevant projects previously participated in..."
-                            rows={3}
+                            placeholder="Provide a list or description of similar projects previously implemented..."
+                            rows={6}
+                            className="resize-y"
                         />
                     </div>
 
@@ -449,13 +452,14 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                             <Button
                                                 variant="destructive"
                                                 size="icon"
-                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-sm shadow-lg flex items-center justify-center p-1.5"
+                                                className="absolute -top-2 -right-2 h-8 w-8 rounded-full shadow-xl flex items-center justify-center p-0 hover:scale-110 transition-transform bg-red-600 hover:bg-red-700 border-2 border-white"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('logo');
                                                 }}
+                                                title="Remove Logo"
                                             >
-                                                <Trash2 className="h-4 w-4 text-white fill-white/20" />
+                                                <Trash2 className="h-4 w-4 text-white" />
                                             </Button>
                                         </div>
                                     ) : (
@@ -525,13 +529,14 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                             <Button
                                                 variant="destructive"
                                                 size="icon"
-                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-sm shadow-lg flex items-center justify-center p-1.5"
+                                                className="absolute -top-2 -right-2 h-8 w-8 rounded-full shadow-xl flex items-center justify-center p-0 hover:scale-110 transition-transform bg-red-600 hover:bg-red-700 border-2 border-white"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('pdf');
                                                 }}
+                                                title="Remove PDF"
                                             >
-                                                <Trash2 className="h-4 w-4 text-white fill-white/20" />
+                                                <Trash2 className="h-4 w-4 text-white" />
                                             </Button>
                                         </div>
                                     ) : (
