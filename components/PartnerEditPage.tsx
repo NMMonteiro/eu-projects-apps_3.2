@@ -45,6 +45,26 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                 contactPersonPhone: undefined,
                 experience: undefined,
                 keywords: undefined,
+                organisationId: '',
+                pic: '',
+                vatNumber: '',
+                businessId: '',
+                isPublicBody: false,
+                isNonProfit: false,
+                legalAddress: '',
+                city: '',
+                postcode: '',
+                region: '',
+                department: '',
+                legalRepName: '',
+                legalRepPosition: '',
+                legalRepEmail: '',
+                legalRepPhone: '',
+                contactPersonPosition: '',
+                contactPersonRole: '',
+                staffSkills: '',
+                relevantProjects: '',
+                createdAt: new Date().toISOString(),
             });
             setLoading(false);
         } else if (partnerId) {
@@ -66,7 +86,45 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
             }
 
             const data = await response.json();
-            setPartner(data);
+            const transformedPartner: Partner = {
+                id: data.id,
+                name: data.name || '',
+                acronym: data.acronym || '',
+                organisationId: data.organisation_id || '',
+                pic: data.pic || '',
+                vatNumber: data.vat_number || '',
+                businessId: data.business_id || '',
+                organizationType: data.organization_type || '',
+                isPublicBody: data.is_public_body || false,
+                isNonProfit: data.is_non_profit || false,
+                country: data.country || '',
+                legalAddress: data.legal_address || '',
+                city: data.city || '',
+                postcode: data.postcode || '',
+                region: data.region || '',
+                contactEmail: data.contact_email || '',
+                website: data.website || '',
+                description: data.description || '',
+                department: data.department || '',
+                keywords: data.keywords || [],
+                logoUrl: data.logo_url || undefined,
+                pdfUrl: data.pdf_url || undefined,
+                legalRepName: data.legal_rep_name || '',
+                legalRepPosition: data.legal_rep_position || '',
+                legalRepEmail: data.legal_rep_email || '',
+                legalRepPhone: data.legal_rep_phone || '',
+                contactPersonName: data.contact_person_name || undefined,
+                contactPersonPosition: data.contact_person_position || '',
+                contactPersonEmail: data.contact_person_email || undefined,
+                contactPersonPhone: data.contact_person_phone || undefined,
+                contactPersonRole: data.contact_person_role || '',
+                experience: data.experience || undefined,
+                staffSkills: data.staff_skills || '',
+                relevantProjects: data.relevant_projects || '',
+                createdAt: data.created_at || new Date().toISOString(),
+                role: data.role || '', // Assuming role might be missing from API
+            };
+            setPartner(transformedPartner);
         } catch (error: any) {
             console.error('Load error:', error);
             toast.error(error.message || 'Failed to load partner');
@@ -452,14 +510,14 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                             <Button
                                                 variant="destructive"
                                                 size="icon"
-                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg flex items-center justify-center bg-red-600 hover:bg-red-700 border-2 border-white z-10"
+                                                className="absolute -top-2.5 -right-2.5 h-7 w-7 rounded-full shadow-lg flex items-center justify-center bg-red-600 hover:bg-red-700 border-2 border-white z-50 overflow-visible"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('logo');
                                                 }}
                                                 title="Remove Logo"
                                             >
-                                                <X className="h-4 w-4 text-white stroke-[3px]" />
+                                                <span className="text-white text-lg font-bold leading-none select-none" style={{ marginTop: '-2px' }}>&times;</span>
                                             </Button>
                                         </div>
                                     ) : (
@@ -529,14 +587,14 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                             <Button
                                                 variant="destructive"
                                                 size="icon"
-                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg flex items-center justify-center bg-red-600 hover:bg-red-700 border-2 border-white z-10"
+                                                className="absolute -top-2.5 -right-2.5 h-7 w-7 rounded-full shadow-lg flex items-center justify-center bg-red-600 hover:bg-red-700 border-2 border-white z-50 overflow-visible"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('pdf');
                                                 }}
                                                 title="Remove PDF"
                                             >
-                                                <X className="h-4 w-4 text-white stroke-[3px]" />
+                                                <span className="text-white text-lg font-bold leading-none select-none" style={{ marginTop: '-2px' }}>&times;</span>
                                             </Button>
                                         </div>
                                     ) : (
