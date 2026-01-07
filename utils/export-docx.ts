@@ -52,6 +52,33 @@ function createParagraph(text: string, options: { bold?: boolean; color?: string
   });
 }
 
+/**
+ * Creates a paragraph with bolding for "Key: Value" patterns.
+ */
+function createSmartParagraph(text: string, options: { bullet?: number } = {}): Paragraph {
+  const colonIndex = text.indexOf(':');
+  // Only bold if colon is not at start/end and seems like a label
+  if (colonIndex > 0 && colonIndex < 60 && colonIndex < text.length - 1) {
+    const key = text.substring(0, colonIndex + 1);
+    const value = text.substring(colonIndex + 1);
+    return new Paragraph({
+      children: [
+        new TextRun({ text: key, bold: true, font: FONT, size: BODY_SIZE }),
+        new TextRun({ text: value, font: FONT, size: BODY_SIZE }),
+      ],
+      spacing: { before: 100, after: 100 },
+      bullet: options.bullet !== undefined ? { level: options.bullet } : undefined,
+    });
+  }
+  return new Paragraph({
+    children: [
+      new TextRun({ text, font: FONT, size: BODY_SIZE }),
+    ],
+    spacing: { before: 120, after: 120 },
+    bullet: options.bullet !== undefined ? { level: options.bullet } : undefined,
+  });
+}
+
 function createSectionHeader(text: string, level: number = 1): Paragraph {
   const size = level === 1 ? H1_SIZE : H2_SIZE;
   return new Paragraph({
@@ -98,6 +125,67 @@ function createTableHeaderCell(text: string): TableCell {
   });
 }
 
+function parseSmartParagraphs(text: string): Paragraph[] {
+  if (!text) return [];
+  // Fix squashed text: e.g. "RPGProject Title:" -> "RPG\nProject Title:"
+  // Looks for boundary where a value ends (lower/digit/bracket) and next Key starts (Upper...:)
+  const processed = text.replace(/([a-z0-9\]\)])(?=[A-Z][a-zA-Z\s\-\/\(\)]{2,40}:)/g, "$1\n");
+
+  const lines = processed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  return lines.map(line => createSmartParagraph(line));
+}
+
+function convertToTableStyle(text: string): (Paragraph | Table)[] {
+  const processed = text.replace(/([a-z0-9\]\)])(?=[A-Z][a-zA-Z\s\-\/\(\)]{2,40}:)/g, "$1\n");
+  const lines = processed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return [];
+
+  const rows: TableRow[] = [];
+
+  lines.forEach(line => {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0 && colonIndex < 45) {
+      const key = line.substring(0, colonIndex).trim();
+      const value = line.substring(colonIndex + 1).trim();
+      rows.push(new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: key, bold: true, font: FONT, size: 20 })],
+              spacing: { before: 80, after: 80 }
+            })],
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { fill: "F9F9F9" }
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: value, font: FONT, size: 20 })],
+              spacing: { before: 80, after: 80 }
+            })],
+            width: { size: 65, type: WidthType.PERCENTAGE }
+          })
+        ]
+      }));
+    } else {
+      // Header or note row
+      rows.push(new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: line, bold: true, font: FONT, size: 20, color: COLOR_PRIMARY })],
+              spacing: { before: 100, after: 100 }
+            })],
+            columnSpan: 2,
+            shading: { fill: COLOR_TABLE_HEADER }
+          })
+        ]
+      }));
+    }
+  });
+
+  return [createStyledTable(rows)];
+}
+
 async function fetchImageAsBase64(url: string): Promise<string | null> {
   if (!url) return null;
   try {
@@ -119,9 +207,15 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   }
 }
 
-function convertHtmlToParagraphs(html: string | undefined | null): (Paragraph | Table)[] {
+function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string): (Paragraph | Table)[] {
   if (!html) return [createParagraph("")];
   const cleanHtml = html.replace(/\s*\(dd\/mm\/yyyy\)/g, "");
+
+  // Specific handling for Annexes or sections that look like data lists
+  if (sectionTitle?.toLowerCase().includes("annexe") || sectionTitle?.toLowerCase().includes("context")) {
+    return convertToTableStyle(cleanHtml);
+  }
+
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(`<body>${cleanHtml}</body>`, 'text/html');
@@ -130,7 +224,7 @@ function convertHtmlToParagraphs(html: string | undefined | null): (Paragraph | 
     Array.from(doc.body.childNodes).forEach(node => {
       if (node.nodeType === 3) {
         const text = node.textContent?.trim();
-        if (text) items.push(createParagraph(text));
+        if (text) items.push(...parseSmartParagraphs(text));
       } else if (node.nodeType === 1) {
         const el = node as HTMLElement;
         const tagName = el.tagName.toUpperCase();
@@ -138,26 +232,28 @@ function convertHtmlToParagraphs(html: string | undefined | null): (Paragraph | 
         if (['H1', 'H2', 'H3'].includes(tagName)) {
           items.push(createSectionHeader(el.innerText, tagName === 'H1' ? 1 : 2));
         } else if (tagName === 'P') {
-          items.push(createParagraph(el.innerText));
+          // Check if the paragraph text contains multiple Key:Value patterns squashed
+          const text = el.innerText;
+          if (text.split(':').length > 2) {
+            items.push(...parseSmartParagraphs(text));
+          } else {
+            items.push(createSmartParagraph(text));
+          }
         } else if (tagName === 'UL' || tagName === 'OL') {
           Array.from(el.children).forEach(li => {
             if (li.tagName === 'LI') {
-              items.push(new Paragraph({
-                text: (li as HTMLElement).innerText,
-                bullet: { level: 0 },
-                spacing: { before: 50, after: 50 }
-              }));
+              items.push(createSmartParagraph((li as HTMLElement).innerText, { bullet: 0 }));
             }
           });
         } else {
           const text = el.innerText?.trim();
-          if (text) items.push(createParagraph(text));
+          if (text) items.push(...parseSmartParagraphs(text));
         }
       }
     });
-    return items.length > 0 ? items : [createParagraph(cleanHtml.replace(/<[^>]*>?/gm, ""))];
+    return items.length > 0 ? items : parseSmartParagraphs(cleanHtml.replace(/<[^>]*>?/gm, ""));
   } catch (e) {
-    return [createParagraph((cleanHtml || "").replace(/<[^>]*>?/gm, ""))];
+    return parseSmartParagraphs((cleanHtml || "").replace(/<[^>]*>?/gm, ""));
   }
 }
 
@@ -171,7 +267,6 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     const p = proposal;
 
     // 1. TITLE PAGE
-    // Top Margin
     docChildren.push(new Paragraph({ spacing: { before: 2000 } }));
 
     // Logo
@@ -199,7 +294,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: "PROJECT PROPOSAL", bold: true, color: COLOR_PRIMARY, size: 28 })],
+                  children: [new TextRun({ text: "PROJECT PROPOSAL", bold: true, color: COLOR_PRIMARY, size: 28, font: FONT })],
                   alignment: AlignmentType.CENTER,
                 }),
                 new Paragraph({
@@ -208,7 +303,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
                   spacing: { before: 400, after: 400 }
                 }),
                 new Paragraph({
-                  children: [new TextRun({ text: fScheme?.name ? `Call for Proposal: ${fScheme.name}` : "H2020 / Horizon Europe Style", italics: true, color: "666666" })],
+                  children: [new TextRun({ text: fScheme?.name ? `Call for Proposal: ${fScheme.name}` : "H2020 / Horizon Europe Style", italics: true, color: "666666", font: FONT })],
                   alignment: AlignmentType.CENTER,
                 })
               ],
@@ -225,7 +320,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     // 2. EXECUTIVE SUMMARY
     docChildren.push(createSectionHeader("Part B: Technical Narrative", 1));
     docChildren.push(createSectionHeader("0. Executive Summary", 2));
-    docChildren.push(...convertHtmlToParagraphs(p.summary));
+    docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary"));
 
     // 3. DYNAMIC NARRATIVE SECTIONS
     const dyn = p.dynamicSections || (p as any).dynamic_sections;
@@ -233,14 +328,15 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
       Object.entries(dyn).forEach(([key, content], idx) => {
         const title = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
         docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
-        docChildren.push(...convertHtmlToParagraphs(content as string));
+        docChildren.push(...convertHtmlToParagraphs(content as string, title));
       });
     } else {
       // Legacy Fallback
       ["relevance", "methods", "impact"].forEach((k, idx) => {
         if ((p as any)[k]) {
-          docChildren.push(createSectionHeader(`${idx + 1}. ${k.toUpperCase()}`, 2));
-          docChildren.push(...convertHtmlToParagraphs((p as any)[k]));
+          const title = k.toUpperCase();
+          docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
+          docChildren.push(...convertHtmlToParagraphs((p as any)[k], title));
         }
       });
     }
@@ -263,10 +359,10 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
         }),
         ...p.partners.map((pt, i) => new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ text: (i + 1).toString(), alignment: AlignmentType.CENTER })] }),
-            new TableCell({ children: [new Paragraph({ text: pt.name, bold: true })] }),
-            new TableCell({ children: [new Paragraph({ text: pt.country || "-" })] }),
-            new TableCell({ children: [new Paragraph({ text: pt.role || "-" })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: (i + 1).toString(), font: FONT })], alignment: AlignmentType.CENTER })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.name, bold: true, font: FONT })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.country || "-", font: FONT })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.role || "-", font: FONT })] })] }),
           ]
         }))
       ];
@@ -289,25 +385,35 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
         }),
         ...p.budget.map(item => new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ text: item.item, bold: true })] }),
-            new TableCell({ children: [new Paragraph({ text: item.description || "-" })] }),
-            new TableCell({ children: [new Paragraph({ text: item.cost.toLocaleString(), alignment: AlignmentType.RIGHT })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.item, bold: true, font: FONT })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.description || "-", font: FONT })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.cost.toLocaleString(), font: FONT })], alignment: AlignmentType.RIGHT })] }),
           ]
         }))
       ];
       docChildren.push(createStyledTable(budgetRows));
     }
 
-    // DOCUMENT ASSEMBLY with Header/Footer
+    // DOCUMENT ASSEMBLY with Header/Footer and Default Styles
     const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: FONT,
+              size: BODY_SIZE,
+            },
+          },
+        },
+      },
       sections: [{
         headers: {
           default: new Header({
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "PROPOSAL: ", bold: true, color: COLOR_PRIMARY }),
-                  new TextRun({ text: p.title || "CONFIDENTIAL", color: COLOR_SECONDARY }),
+                  new TextRun({ text: "PROPOSAL: ", bold: true, color: COLOR_PRIMARY, font: FONT }),
+                  new TextRun({ text: p.title || "CONFIDENTIAL", color: COLOR_SECONDARY, font: FONT }),
                 ],
                 border: { bottom: { color: "DDDDDD", space: 4, style: BorderStyle.SINGLE, size: 1 } }
               })
@@ -319,11 +425,11 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "Generated by EU Proposal Tool", italics: true, size: 18 }),
-                  new TextRun({ text: " | Page " }),
-                  new TextRun({ children: ["PAGE_NUMBER"], color: COLOR_PRIMARY, bold: true }),
-                  new TextRun({ text: " of " }),
-                  new TextRun({ children: ["NUM_PAGES"] }),
+                  new TextRun({ text: "Generated by EU Proposal Tool", italics: true, size: 18, font: FONT }),
+                  new TextRun({ text: " | Page ", font: FONT }),
+                  new TextRun({ children: ["PAGE_NUMBER"], color: COLOR_PRIMARY, bold: true, font: FONT }),
+                  new TextRun({ text: " of ", font: FONT }),
+                  new TextRun({ children: ["NUM_PAGES"], font: FONT }),
                 ],
                 alignment: AlignmentType.RIGHT,
                 border: { top: { color: "DDDDDD", space: 4, style: BorderStyle.SINGLE, size: 1 } }
@@ -354,3 +460,4 @@ export async function exportToDocx(proposal: FullProposal): Promise<void> {
     alert("Professional Export failed: " + (error as Error).message);
   }
 }
+
