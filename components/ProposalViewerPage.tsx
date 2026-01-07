@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Download, Share2, FileText, LayoutGrid, Users, Calendar, DollarSign, AlertTriangle, CheckCircle2, Layers, Plus, Trash2, Settings, ChevronDown, Folder, Edit, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, Share2, FileText, LayoutGrid, Users, Calendar, DollarSign, AlertTriangle, CheckCircle2, Layers, Plus, Trash2, Settings, ChevronDown, Folder, Edit, Sparkles, MoreHorizontal, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -1103,7 +1103,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                     handleRemovePartnerClick(idx, partner.name);
                                                 }}
                                             >
-                                                <span className="text-xl font-bold">×</span>
+                                                <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </CardHeader>
@@ -1227,7 +1227,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                                 onClick={() => handleAddSubItem(idx)}
                                                                 title="Add Sub-item"
                                                             >
-                                                                <span className="text-white text-lg font-bold">+</span>
+                                                                <Plus className="h-4 w-4" />
                                                             </Button>
                                                             <Button
                                                                 variant="ghost"
@@ -1236,7 +1236,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                                 onClick={() => handleRemoveBudgetItem(idx)}
                                                                 title="Remove Item"
                                                             >
-                                                                <span className="text-xl font-bold">×</span>
+                                                                <Trash2 className="h-4 w-4" />
                                                             </Button>
                                                         </div>
                                                     </td>
@@ -1297,7 +1297,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                                     className="h-6 w-6 rounded-lg hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                                                     onClick={() => handleRemoveSubItem(idx, subIdx)}
                                                                 >
-                                                                    <span className="text-lg font-bold">×</span>
+                                                                    <Trash2 className="h-3 w-3" />
                                                                 </Button>
                                                             </td>
                                                         </tr>

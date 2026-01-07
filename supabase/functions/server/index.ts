@@ -520,6 +520,12 @@ Return ONLY valid JSON, no other text.`;
                 name: p.name,
                 acronym: p.acronym,
                 country: p.country,
+                logoUrl: p.logo_url,
+                contactPersonName: p.contact_person_name,
+                contactPersonPhone: p.contact_person_phone,
+                contactPersonEmail: p.contact_person_email,
+                contactEmail: p.contact_email,
+                organizationType: p.organization_type,
                 createdAt: p.created_at
             }));
 

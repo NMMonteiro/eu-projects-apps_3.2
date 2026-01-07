@@ -455,7 +455,7 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                                     handleDeleteClick('logo');
                                                 }}
                                             >
-                                                <span className="text-xl font-bold">×</span>
+                                                <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     ) : (
@@ -531,7 +531,7 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                                     handleDeleteClick('pdf');
                                                 }}
                                             >
-                                                <span className="text-xl font-bold">×</span>
+                                                <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     ) : (
