@@ -14,9 +14,9 @@
   ImageRun,
   Header,
   Footer,
-  ExternalHyperlink,
   VerticalAlign,
   ShadingType,
+  PageNumber,
 } from "docx";
 import { saveAs } from "file-saver";
 import { FullProposal } from "../types/proposal";
@@ -53,14 +53,47 @@ function createParagraph(text: string, options: { bold?: boolean; color?: string
 }
 
 /**
+ * Robustly splits squashed labels. 
+ * E.g. "RPGProject Title:" -> "RPG\nProject Title:"
+ */
+function fixSquashedText(text: string): string {
+  // Pattern: [Non-whitespace char][Uppercase letter followed by lowercase and colon]
+  return text.replace(/([^\s])(?=[A-Z][a-zA-Z0-9\s\-\/\(\)\°]{2,60}:)/g, "$1\n");
+}
+
+/**
+ * Strips HTML tags and replaces BR/P with newlines to preserve structure.
+ */
+function cleanHtml(html: string | undefined | null): string {
+  if (!html) return "";
+  // Unescape common entities first
+  let decoded = html
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+
+  // Basic tag substitution for line breaks
+  return decoded
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<li>/gi, "\n• ")
+    .replace(/<[^>]*>/g, "")
+    .trim();
+}
+
+/**
  * Creates a paragraph with bolding for "Key: Value" patterns.
  */
 function createSmartParagraph(text: string, options: { bullet?: number } = {}): Paragraph {
-  const colonIndex = text.indexOf(':');
-  // Only bold if colon is not at start/end and seems like a label
-  if (colonIndex > 0 && colonIndex < 60 && colonIndex < text.length - 1) {
-    const key = text.substring(0, colonIndex + 1);
-    const value = text.substring(colonIndex + 1);
+  const line = text.trim();
+  const colonIndex = line.indexOf(':');
+
+  // Only bold if colon is not at start/end and seems like a label (limit length)
+  if (colonIndex > 0 && colonIndex < 70 && colonIndex < line.length - 1) {
+    const key = line.substring(0, colonIndex + 1);
+    const value = line.substring(colonIndex + 1);
     return new Paragraph({
       children: [
         new TextRun({ text: key, bold: true, font: FONT, size: BODY_SIZE }),
@@ -70,12 +103,100 @@ function createSmartParagraph(text: string, options: { bullet?: number } = {}): 
       bullet: options.bullet !== undefined ? { level: options.bullet } : undefined,
     });
   }
+
   return new Paragraph({
     children: [
-      new TextRun({ text, font: FONT, size: BODY_SIZE }),
+      new TextRun({ text: line, font: FONT, size: BODY_SIZE }),
     ],
     spacing: { before: 120, after: 120 },
     bullet: options.bullet !== undefined ? { level: options.bullet } : undefined,
+  });
+}
+
+function createKeyValueTable(lines: string[]): Table {
+  const rows: TableRow[] = [];
+
+  lines.forEach(line => {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0 && colonIndex < 70) {
+      const key = line.substring(0, colonIndex).trim();
+      const value = line.substring(colonIndex + 1).trim();
+      rows.push(new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: key, bold: true, font: FONT, size: BODY_SIZE })],
+              spacing: { before: 80, after: 80 }
+            })],
+            width: { size: 35, type: WidthType.PERCENTAGE },
+            shading: { fill: "F9F9F9" }
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: value, font: FONT, size: BODY_SIZE })],
+              spacing: { before: 80, after: 80 }
+            })],
+            width: { size: 65, type: WidthType.PERCENTAGE }
+          })
+        ]
+      }));
+    } else if (line.length > 0) {
+      // Header row or notes
+      rows.push(new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: line, bold: true, font: FONT, size: BODY_SIZE, color: COLOR_PRIMARY })],
+              spacing: { before: 100, after: 100 }
+            })],
+            columnSpan: 2,
+            shading: { fill: COLOR_TABLE_HEADER }
+          })
+        ]
+      }));
+    }
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+    },
+  });
+}
+
+function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string): (Paragraph | Table)[] {
+  // 1. Clean HTML and get structured text
+  let text = cleanHtml(html);
+
+  // 2. Remove any leftover date format labels
+  text = text.replace(/\s*\(dd\/mm\/yyyy\)/g, "");
+
+  // 3. Fix squashed labels
+  text = fixSquashedText(text);
+
+  // 4. Split into lines
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return [createParagraph("")];
+
+  // 5. Special table-style for data-heavy sections
+  const lowerTitle = (sectionTitle || "").toLowerCase();
+  if (lowerTitle.includes("annex") || lowerTitle.includes("context")) {
+    return [createKeyValueTable(lines)];
+  }
+
+  // 6. Default: List of paragraphs with bold labels
+  return lines.map(line => {
+    if (line.startsWith("• ")) {
+      return createSmartParagraph(line.substring(2), { bullet: 0 });
+    }
+    return createSmartParagraph(line);
   });
 }
 
@@ -99,91 +220,15 @@ function createSectionHeader(text: string, level: number = 1): Paragraph {
   });
 }
 
-function createStyledTable(rows: TableRow[]): Table {
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows,
-    borders: {
-      top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-      bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-      left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-      right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
-      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
-      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
-    },
-  });
-}
-
 function createTableHeaderCell(text: string): TableCell {
   return new TableCell({
     children: [new Paragraph({
-      children: [new TextRun({ text, bold: true, size: 20, font: FONT })],
+      children: [new TextRun({ text, bold: true, size: BODY_SIZE, font: FONT })],
       alignment: AlignmentType.CENTER
     })],
     shading: { fill: COLOR_TABLE_HEADER, type: ShadingType.CLEAR },
     verticalAlign: VerticalAlign.CENTER,
   });
-}
-
-function parseSmartParagraphs(text: string): Paragraph[] {
-  if (!text) return [];
-  // Fix squashed text: e.g. "RPGProject Title:" -> "RPG\nProject Title:"
-  // Looks for boundary where a value ends (lower/digit/bracket) and next Key starts (Upper...:)
-  const processed = text.replace(/([a-z0-9\]\)])(?=[A-Z][a-zA-Z\s\-\/\(\)]{2,40}:)/g, "$1\n");
-
-  const lines = processed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-  return lines.map(line => createSmartParagraph(line));
-}
-
-function convertToTableStyle(text: string): (Paragraph | Table)[] {
-  const processed = text.replace(/([a-z0-9\]\)])(?=[A-Z][a-zA-Z\s\-\/\(\)]{2,40}:)/g, "$1\n");
-  const lines = processed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-  if (lines.length === 0) return [];
-
-  const rows: TableRow[] = [];
-
-  lines.forEach(line => {
-    const colonIndex = line.indexOf(':');
-    if (colonIndex > 0 && colonIndex < 45) {
-      const key = line.substring(0, colonIndex).trim();
-      const value = line.substring(colonIndex + 1).trim();
-      rows.push(new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({ text: key, bold: true, font: FONT, size: 20 })],
-              spacing: { before: 80, after: 80 }
-            })],
-            width: { size: 35, type: WidthType.PERCENTAGE },
-            shading: { fill: "F9F9F9" }
-          }),
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({ text: value, font: FONT, size: 20 })],
-              spacing: { before: 80, after: 80 }
-            })],
-            width: { size: 65, type: WidthType.PERCENTAGE }
-          })
-        ]
-      }));
-    } else {
-      // Header or note row
-      rows.push(new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({ text: line, bold: true, font: FONT, size: 20, color: COLOR_PRIMARY })],
-              spacing: { before: 100, after: 100 }
-            })],
-            columnSpan: 2,
-            shading: { fill: COLOR_TABLE_HEADER }
-          })
-        ]
-      }));
-    }
-  });
-
-  return [createStyledTable(rows)];
 }
 
 async function fetchImageAsBase64(url: string): Promise<string | null> {
@@ -204,56 +249,6 @@ async function fetchImageAsBase64(url: string): Promise<string | null> {
   } catch (error) {
     console.warn('Image fetch failed:', error);
     return null;
-  }
-}
-
-function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string): (Paragraph | Table)[] {
-  if (!html) return [createParagraph("")];
-  const cleanHtml = html.replace(/\s*\(dd\/mm\/yyyy\)/g, "");
-
-  // Specific handling for Annexes or sections that look like data lists
-  if (sectionTitle?.toLowerCase().includes("annexe") || sectionTitle?.toLowerCase().includes("context")) {
-    return convertToTableStyle(cleanHtml);
-  }
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${cleanHtml}</body>`, 'text/html');
-    const items: (Paragraph | Table)[] = [];
-
-    Array.from(doc.body.childNodes).forEach(node => {
-      if (node.nodeType === 3) {
-        const text = node.textContent?.trim();
-        if (text) items.push(...parseSmartParagraphs(text));
-      } else if (node.nodeType === 1) {
-        const el = node as HTMLElement;
-        const tagName = el.tagName.toUpperCase();
-
-        if (['H1', 'H2', 'H3'].includes(tagName)) {
-          items.push(createSectionHeader(el.innerText, tagName === 'H1' ? 1 : 2));
-        } else if (tagName === 'P') {
-          // Check if the paragraph text contains multiple Key:Value patterns squashed
-          const text = el.innerText;
-          if (text.split(':').length > 2) {
-            items.push(...parseSmartParagraphs(text));
-          } else {
-            items.push(createSmartParagraph(text));
-          }
-        } else if (tagName === 'UL' || tagName === 'OL') {
-          Array.from(el.children).forEach(li => {
-            if (li.tagName === 'LI') {
-              items.push(createSmartParagraph((li as HTMLElement).innerText, { bullet: 0 }));
-            }
-          });
-        } else {
-          const text = el.innerText?.trim();
-          if (text) items.push(...parseSmartParagraphs(text));
-        }
-      }
-    });
-    return items.length > 0 ? items : parseSmartParagraphs(cleanHtml.replace(/<[^>]*>?/gm, ""));
-  } catch (e) {
-    return parseSmartParagraphs((cleanHtml || "").replace(/<[^>]*>?/gm, ""));
   }
 }
 
@@ -288,31 +283,40 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
 
     // Title & Acronym Table
     docChildren.push(
-      createStyledTable([
-        new TableRow({
-          children: [
-            new TableCell({
-              children: [
-                new Paragraph({
-                  children: [new TextRun({ text: "PROJECT PROPOSAL", bold: true, color: COLOR_PRIMARY, size: 28, font: FONT })],
-                  alignment: AlignmentType.CENTER,
-                }),
-                new Paragraph({
-                  children: [new TextRun({ text: p.title || "Untitled Proposal", bold: true, size: 48, font: FONT })],
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 400, after: 400 }
-                }),
-                new Paragraph({
-                  children: [new TextRun({ text: fScheme?.name ? `Call for Proposal: ${fScheme.name}` : "H2020 / Horizon Europe Style", italics: true, color: "666666", font: FONT })],
-                  alignment: AlignmentType.CENTER,
-                })
-              ],
-              shading: { fill: "F9F9F9" },
-              margins: { top: 400, bottom: 400, left: 400, right: 400 }
-            })
-          ]
-        })
-      ])
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "PROJECT PROPOSAL", bold: true, color: COLOR_PRIMARY, size: 28, font: FONT })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: p.title || "Untitled Proposal", bold: true, size: 48, font: FONT })],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 400, after: 400 }
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: fScheme?.name ? `Call for Proposal: ${fScheme.name}` : "H2020 / Horizon Europe Style", italics: true, color: "666666", font: FONT })],
+                    alignment: AlignmentType.CENTER,
+                  })
+                ],
+                shading: { fill: "F9F9F9" },
+                margins: { top: 400, bottom: 400, left: 400, right: 400 }
+              })
+            ]
+          })
+        ],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+        }
+      })
     );
 
     docChildren.push(new Paragraph({ children: [new PageBreak()] }));
@@ -359,14 +363,26 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
         }),
         ...p.partners.map((pt, i) => new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: (i + 1).toString(), font: FONT })], alignment: AlignmentType.CENTER })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.name, bold: true, font: FONT })] })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.country || "-", font: FONT })] })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.role || "-", font: FONT })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: (i + 1).toString(), font: FONT, size: BODY_SIZE })], alignment: AlignmentType.CENTER })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.name, bold: true, font: FONT, size: BODY_SIZE })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.country || "-", font: FONT, size: BODY_SIZE })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: pt.role || "-", font: FONT, size: BODY_SIZE })] })] }),
           ]
         }))
       ];
-      docChildren.push(createStyledTable(partnerRows));
+
+      docChildren.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: partnerRows,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+        }
+      }));
       docChildren.push(new Paragraph({ text: "" })); // Spacer
     }
 
@@ -385,13 +401,25 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
         }),
         ...p.budget.map(item => new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.item, bold: true, font: FONT })] })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.description || "-", font: FONT })] })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.cost.toLocaleString(), font: FONT })], alignment: AlignmentType.RIGHT })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.item, bold: true, font: FONT, size: BODY_SIZE })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.description || "-", font: FONT, size: BODY_SIZE })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.cost.toLocaleString(), font: FONT, size: BODY_SIZE })], alignment: AlignmentType.RIGHT })] }),
           ]
         }))
       ];
-      docChildren.push(createStyledTable(budgetRows));
+
+      docChildren.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: budgetRows,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+        }
+      }));
     }
 
     // DOCUMENT ASSEMBLY with Header/Footer and Default Styles
@@ -412,8 +440,8 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: "PROPOSAL: ", bold: true, color: COLOR_PRIMARY, font: FONT }),
-                  new TextRun({ text: p.title || "CONFIDENTIAL", color: COLOR_SECONDARY, font: FONT }),
+                  new TextRun({ text: "PROPOSAL: ", bold: true, color: COLOR_PRIMARY, font: FONT, size: 18 }),
+                  new TextRun({ text: p.title || "CONFIDENTIAL", color: COLOR_SECONDARY, font: FONT, size: 18 }),
                 ],
                 border: { bottom: { color: "DDDDDD", space: 4, style: BorderStyle.SINGLE, size: 1 } }
               })
@@ -426,10 +454,10 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
               new Paragraph({
                 children: [
                   new TextRun({ text: "Generated by EU Proposal Tool", italics: true, size: 18, font: FONT }),
-                  new TextRun({ text: " | Page ", font: FONT }),
-                  new TextRun({ children: ["PAGE_NUMBER"], color: COLOR_PRIMARY, bold: true, font: FONT }),
-                  new TextRun({ text: " of ", font: FONT }),
-                  new TextRun({ children: ["NUM_PAGES"], font: FONT }),
+                  new TextRun({ text: " | Page ", font: FONT, size: 18 }),
+                  new TextRun({ children: [PageNumber.CURRENT], color: COLOR_PRIMARY, bold: true, font: FONT, size: 18 }),
+                  new TextRun({ text: " of ", font: FONT, size: 18 }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], font: FONT, size: 18 }),
                 ],
                 alignment: AlignmentType.RIGHT,
                 border: { top: { color: "DDDDDD", space: 4, style: BorderStyle.SINGLE, size: 1 } }
@@ -460,4 +488,5 @@ export async function exportToDocx(proposal: FullProposal): Promise<void> {
     alert("Professional Export failed: " + (error as Error).message);
   }
 }
+
 
