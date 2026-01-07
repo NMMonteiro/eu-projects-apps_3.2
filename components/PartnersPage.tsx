@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Plus, Edit, Search, Building2, Globe, Mail, Upload, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Edit, Search, Building2, Globe, Mail, Upload, Trash2, User, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -113,101 +113,103 @@ export function PartnersPage({ onEditPartner }: PartnersPageProps) {
                         {partners.length} partner{partners.length !== 1 ? 's' : ''} in your consortium
                     </p>
                 </div>
-                <Button
-                    onClick={handleCreateNew}
-                    className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
-                >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Partner
-                </Button>
-                <div className="relative ml-2">
-                    <input
-                        type="file"
-                        accept=".pdf"
-                        className="hidden"
-                        id="partners-page-pdf-upload"
-                        onChange={async (e) => {
-                            console.log('=== FILE INPUT CHANGE DETECTED ===');
-                            const file = e.target.files?.[0];
-                            if (!file) {
-                                console.log('No file selected');
-                                return;
-                            }
-                            console.log('=== PDF IMPORT STARTED ===');
-                            console.log('File selected:', file.name, file.size, 'bytes');
-
-                            // Immediate feedback
-                            const toastId = toast.loading('Starting upload...');
-
-                            try {
-                                const formData = new FormData();
-                                formData.append('file', file);
-
-                                console.log('Sending request to:', `${serverUrl}/import-partner-pdf`);
-
-                                // Add timeout to fetch
-                                const controller = new AbortController();
-                                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
-
-                                const startTime = Date.now();
-                                const response = await fetch(`${serverUrl}/import-partner-pdf`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${publicAnonKey}`,
-                                    },
-                                    body: formData,
-                                    signal: controller.signal
-                                });
-                                clearTimeout(timeoutId);
-
-                                const duration = Date.now() - startTime;
-                                console.log('Response received after', duration, 'ms');
-                                console.log('Response status:', response.status, response.statusText);
-
-                                const responseText = await response.text();
-                                console.log('Response body:', responseText);
-
-                                if (!response.ok) {
-                                    throw new Error(`Server returned ${response.status}: ${responseText}`);
-                                }
-
-                                const data = JSON.parse(responseText);
-                                console.log('Extraction success! Partner ID:', data.partnerId);
-                                const { partnerId } = data;
-
-                                toast.dismiss(toastId);
-                                toast.success('Partner imported successfully!');
-
-                                // Navigate to edit page immediately
-                                console.log('Navigating to partner edit page for:', partnerId);
-                                if (onEditPartner) {
-                                    onEditPartner(partnerId);
-                                } else {
-                                    console.error('onEditPartner callback is missing!');
-                                }
-
-                            } catch (error: any) {
-                                console.error('=== PDF IMPORT ERROR ===', error);
-                                toast.dismiss(toastId);
-
-                                if (error.name === 'AbortError') {
-                                    toast.error('Request timed out. The server took too long to respond.');
-                                } else {
-                                    toast.error(`Failed to import PDF: ${error.message}`);
-                                }
-                            } finally {
-                                // Reset input
-                                e.target.value = '';
-                            }
-                        }}
-                    />
+                <div className="flex items-center gap-3">
                     <Button
-                        variant="outline"
-                        onClick={() => document.getElementById('partners-page-pdf-upload')?.click()}
+                        onClick={handleCreateNew}
+                        className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
                     >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Import PDF
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Partner
                     </Button>
+                    <div className="relative">
+                        <input
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            id="partners-page-pdf-upload"
+                            onChange={async (e) => {
+                                console.log('=== FILE INPUT CHANGE DETECTED ===');
+                                const file = e.target.files?.[0];
+                                if (!file) {
+                                    console.log('No file selected');
+                                    return;
+                                }
+                                console.log('=== PDF IMPORT STARTED ===');
+                                console.log('File selected:', file.name, file.size, 'bytes');
+
+                                // Immediate feedback
+                                const toastId = toast.loading('Starting upload...');
+
+                                try {
+                                    const formData = new FormData();
+                                    formData.append('file', file);
+
+                                    console.log('Sending request to:', `${serverUrl}/import-partner-pdf`);
+
+                                    // Add timeout to fetch
+                                    const controller = new AbortController();
+                                    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+                                    const startTime = Date.now();
+                                    const response = await fetch(`${serverUrl}/import-partner-pdf`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': `Bearer ${publicAnonKey}`,
+                                        },
+                                        body: formData,
+                                        signal: controller.signal
+                                    });
+                                    clearTimeout(timeoutId);
+
+                                    const duration = Date.now() - startTime;
+                                    console.log('Response received after', duration, 'ms');
+                                    console.log('Response status:', response.status, response.statusText);
+
+                                    const responseText = await response.text();
+                                    console.log('Response body:', responseText);
+
+                                    if (!response.ok) {
+                                        throw new Error(`Server returned ${response.status}: ${responseText}`);
+                                    }
+
+                                    const data = JSON.parse(responseText);
+                                    console.log('Extraction success! Partner ID:', data.partnerId);
+                                    const { partnerId } = data;
+
+                                    toast.dismiss(toastId);
+                                    toast.success('Partner imported successfully!');
+
+                                    // Navigate to edit page immediately
+                                    console.log('Navigating to partner edit page for:', partnerId);
+                                    if (onEditPartner) {
+                                        onEditPartner(partnerId);
+                                    } else {
+                                        console.error('onEditPartner callback is missing!');
+                                    }
+
+                                } catch (error: any) {
+                                    console.error('=== PDF IMPORT ERROR ===', error);
+                                    toast.dismiss(toastId);
+
+                                    if (error.name === 'AbortError') {
+                                        toast.error('Request timed out. The server took too long to respond.');
+                                    } else {
+                                        toast.error(`Failed to import PDF: ${error.message}`);
+                                    }
+                                } finally {
+                                    // Reset input
+                                    e.target.value = '';
+                                }
+                            }}
+                        />
+                        <Button
+                            variant="outline"
+                            onClick={() => document.getElementById('partners-page-pdf-upload')?.click()}
+                        >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Import PDF
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -235,78 +237,99 @@ export function PartnersPage({ onEditPartner }: PartnersPageProps) {
                     )}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-3">
                     {filteredPartners.map((partner) => (
-                        <Card key={partner.id} className="hover:border-primary/50 transition-colors group">
-                            <CardHeader>
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <CardTitle className="text-base line-clamp-1 group-hover:text-primary transition-colors">{partner.name}</CardTitle>
-                                        {partner.acronym && (
-                                            <CardDescription className="text-xs mt-1">{partner.acronym}</CardDescription>
+                        <div key={partner.id} className="flex items-center gap-4 p-4 border rounded-xl hover:border-primary/50 transition-all group bg-card/40 backdrop-blur-sm shadow-sm">
+                            {/* Logo Column */}
+                            <div className="shrink-0 w-14 h-14 flex items-center justify-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+                                {partner.logoUrl ? (
+                                    <img
+                                        src={partner.logoUrl}
+                                        alt={partner.name}
+                                        className="w-full h-full object-contain p-1"
+                                    />
+                                ) : (
+                                    <Building2 className="w-7 h-7 text-muted-foreground/50" />
+                                )}
+                            </div>
+
+                            {/* Content Column */}
+                            <div className="flex-1 min-w-0">
+                                {/* Line 1: name | Contact Person Name | phone | email */}
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-1">
+                                    <h3
+                                        className="font-bold text-lg group-hover:text-primary transition-colors truncate cursor-pointer"
+                                        onClick={() => onEditPartner && onEditPartner(partner.id)}
+                                    >
+                                        {partner.name}
+                                    </h3>
+
+                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                        {partner.contactPersonName && (
+                                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                <User className="w-3.5 h-3.5 text-primary/60" />
+                                                {partner.contactPersonName}
+                                            </div>
+                                        )}
+                                        {partner.contactPersonPhone && (
+                                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                <Phone className="w-3.5 h-3.5 text-primary/60" />
+                                                {partner.contactPersonPhone}
+                                            </div>
+                                        )}
+                                        {(partner.contactPersonEmail || partner.contactEmail) && (
+                                            <div className="flex items-center gap-1.5 whitespace-nowrap truncate max-w-[200px]">
+                                                <Mail className="w-3.5 h-3.5 text-primary/60" />
+                                                {partner.contactPersonEmail || partner.contactEmail}
+                                            </div>
                                         )}
                                     </div>
-                                    {partner.logoUrl && (
-                                        <img
-                                            src={partner.logoUrl}
-                                            alt={partner.name}
-                                            className="w-12 h-12 object-contain ml-2 bg-white/5 rounded-md p-1"
-                                        />
-                                    )}
                                 </div>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="flex flex-wrap gap-2">
+
+                                {/* Line 2: country | Organization Type */}
+                                <div className="flex items-center gap-3">
                                     {partner.country && (
-                                        <Badge variant="outline" className="text-xs">
-                                            <Globe className="h-3 w-3 mr-1" />
+                                        <div className="flex items-center text-xs font-medium text-foreground/80">
+                                            <Globe className="w-3.5 h-3.5 mr-1.5 text-primary" />
                                             {partner.country}
-                                        </Badge>
+                                        </div>
                                     )}
                                     {partner.organizationType && (
-                                        <Badge variant="secondary" className="text-xs">
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 uppercase tracking-wider bg-primary/10 text-primary border-none">
                                             {partner.organizationType}
                                         </Badge>
                                     )}
+                                    {partner.acronym && (
+                                        <span className="text-[10px] text-muted-foreground font-mono bg-white/5 px-1 rounded uppercase">
+                                            {partner.acronym}
+                                        </span>
+                                    )}
                                 </div>
+                            </div>
 
-                                {partner.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2">
-                                        {partner.description}
-                                    </p>
-                                )}
-
-                                {partner.contactEmail && (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                        <Mail className="h-3 w-3" />
-                                        <span className="line-clamp-1">{partner.contactEmail}</span>
-                                    </div>
-                                )}
-
-                                <div className="flex gap-2 pt-2">
-                                    <Button
-                                        onClick={() => onEditPartner && onEditPartner(partner.id)}
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                    >
-                                        <Edit className="h-3 w-3 mr-1" />
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteClick(partner.id, partner.name);
-                                        }}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 shrink-0 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-white border border-red-500/20"
-                                    >
-                                        <span className="text-xl font-bold">×</span>
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
+                            {/* Actions Column */}
+                            <div className="flex items-center gap-1.5 pl-2">
+                                <Button
+                                    onClick={() => onEditPartner && onEditPartner(partner.id)}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
+                                >
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteClick(partner.id, partner.name);
+                                    }}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
                     ))}
                 </div>
             )}
