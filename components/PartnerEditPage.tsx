@@ -447,15 +447,15 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                                 className="w-full h-full object-contain"
                                             />
                                             <Button
-                                                variant="ghost"
+                                                variant="destructive"
                                                 size="icon"
-                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-lg shadow-lg bg-red-500/10 hover:bg-red-500/20 text-white border border-red-500/20"
+                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-sm shadow-lg flex items-center justify-center p-1.5"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('logo');
                                                 }}
                                             >
-                                                <Trash2 className="h-4 w-4" />
+                                                <Trash2 className="h-4 w-4 text-white fill-white/20" />
                                             </Button>
                                         </div>
                                     ) : (
@@ -523,15 +523,15 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                                 </a>
                                             </div>
                                             <Button
-                                                variant="ghost"
+                                                variant="destructive"
                                                 size="icon"
-                                                className="h-7 w-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-white border border-red-500/20"
+                                                className="absolute -top-2 -right-2 h-7 w-7 rounded-sm shadow-lg flex items-center justify-center p-1.5"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDeleteClick('pdf');
                                                 }}
                                             >
-                                                <Trash2 className="h-4 w-4" />
+                                                <Trash2 className="h-4 w-4 text-white fill-white/20" />
                                             </Button>
                                         </div>
                                     ) : (
