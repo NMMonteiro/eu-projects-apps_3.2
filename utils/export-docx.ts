@@ -19,7 +19,8 @@
   PageNumber,
 } from "docx";
 import { saveAs } from "file-saver";
-import { FullProposal } from "../types/proposal";
+import { FullProposal, WorkPackage } from "../types/proposal";
+import { Partner } from "../types/partner";
 
 // ============================================================================
 // STYLING CONSTANTS (EU PROFESSIONAL STYLE)
@@ -35,6 +36,13 @@ const H2_SIZE = 28;   // 14pt
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+function getCurrencySymbol(currency: string = "EUR"): string {
+  if (currency === "EUR") return "€";
+  if (currency === "USD") return "$";
+  if (currency === "GBP") return "£";
+  return currency;
+}
 
 function createParagraph(text: string, options: { bold?: boolean; color?: string; size?: number; italic?: boolean } = {}): Paragraph {
   return new Paragraph({
@@ -57,8 +65,20 @@ function createParagraph(text: string, options: { bold?: boolean; color?: string
  * E.g. "RPGProject Title:" -> "RPG\nProject Title:"
  */
 function fixSquashedText(text: string): string {
-  // Pattern: [Non-whitespace char][Uppercase letter followed by lowercase and colon]
-  return text.replace(/([^\s])(?=[A-Z][a-zA-Z0-9\s\-\/\(\)\°]{2,60}:)/g, "$1\n");
+  // Pattern: [lowercase|digit|bracket|parenthesis] followed by [Uppercase + lowercase + rest of label + colon]
+  // This avoids splitting (EUR): or acronyms like RPG.
+  return text.replace(/([a-z0-9\]\)])(?=[A-Z][a-z][a-zA-Z0-9\s\-\/\(\)\°]{2,60}:)/g, "$1\n");
+}
+
+/**
+ * Formatting for currency and symbols.
+ */
+function formatContentText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\bEUR\b/g, "€")
+    .replace(/\bEuro(s)?\b/gi, "€")
+    .replace(/\bE U R\b/g, "€");
 }
 
 /**
@@ -87,7 +107,7 @@ function cleanHtml(html: string | undefined | null): string {
  * Creates a paragraph with bolding for "Key: Value" patterns.
  */
 function createSmartParagraph(text: string, options: { bullet?: number } = {}): Paragraph {
-  const line = text.trim();
+  const line = formatContentText(text.trim());
   const colonIndex = line.indexOf(':');
 
   // Only bold if colon is not at start/end and seems like a label (limit length)
@@ -117,10 +137,11 @@ function createKeyValueTable(lines: string[]): Table {
   const rows: TableRow[] = [];
 
   lines.forEach(line => {
-    const colonIndex = line.indexOf(':');
+    const formattedLine = formatContentText(line);
+    const colonIndex = formattedLine.indexOf(':');
     if (colonIndex > 0 && colonIndex < 70) {
-      const key = line.substring(0, colonIndex).trim();
-      const value = line.substring(colonIndex + 1).trim();
+      const key = formattedLine.substring(0, colonIndex).trim();
+      const value = formattedLine.substring(colonIndex + 1).trim();
       rows.push(new TableRow({
         children: [
           new TableCell({
@@ -140,13 +161,13 @@ function createKeyValueTable(lines: string[]): Table {
           })
         ]
       }));
-    } else if (line.length > 0) {
+    } else if (formattedLine.length > 0) {
       // Header row or notes
       rows.push(new TableRow({
         children: [
           new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({ text: line, bold: true, font: FONT, size: BODY_SIZE, color: COLOR_PRIMARY })],
+              children: [new TextRun({ text: formattedLine, bold: true, font: FONT, size: BODY_SIZE, color: COLOR_PRIMARY })],
               spacing: { before: 100, after: 100 }
             })],
             columnSpan: 2,
@@ -171,6 +192,58 @@ function createKeyValueTable(lines: string[]): Table {
   });
 }
 
+function createWorkPackageTable(wps: WorkPackage[]): Table {
+  const rows: TableRow[] = [];
+
+  // Header
+  rows.push(new TableRow({
+    children: [
+      createTableHeaderCell("WP No."),
+      createTableHeaderCell("Work Package Name"),
+      createTableHeaderCell("Activities / Deliverables"),
+    ]
+  }));
+
+  wps.forEach((wp, idx) => {
+    rows.push(new TableRow({
+      children: [
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text: (idx + 1).toString(), bold: true, font: FONT, size: BODY_SIZE })], alignment: AlignmentType.CENTER })],
+          verticalAlign: VerticalAlign.CENTER,
+          shading: { fill: "F9F9F9" }
+        }),
+        new TableCell({
+          children: [
+            new Paragraph({ children: [new TextRun({ text: wp.name, bold: true, font: FONT, size: BODY_SIZE })] }),
+            new Paragraph({ children: [new TextRun({ text: wp.description, font: FONT, size: 18, color: "666666" })] }),
+          ]
+        }),
+        new TableCell({
+          children: (wp.deliverables || []).map(del =>
+            new Paragraph({
+              children: [new TextRun({ text: `• ${del}`, font: FONT, size: 18 })],
+              spacing: { before: 40, after: 40 }
+            })
+          )
+        })
+      ]
+    }));
+  });
+
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+    }
+  });
+}
+
 function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string): (Paragraph | Table)[] {
   // 1. Clean HTML and get structured text
   let text = cleanHtml(html);
@@ -187,7 +260,7 @@ function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?:
 
   // 5. Special table-style for data-heavy sections
   const lowerTitle = (sectionTitle || "").toLowerCase();
-  if (lowerTitle.includes("annex") || lowerTitle.includes("context")) {
+  if (lowerTitle.includes("annex") || lowerTitle.includes("context") || lowerTitle.includes("budget items")) {
     return [createKeyValueTable(lines)];
   }
 
@@ -260,6 +333,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
   try {
     const docChildren: (Paragraph | Table)[] = [];
     const p = proposal;
+    const currency = getCurrencySymbol(p.settings?.currency);
 
     // 1. TITLE PAGE
     docChildren.push(new Paragraph({ spacing: { before: 2000 } }));
@@ -331,8 +405,16 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     if (dyn && Object.keys(dyn).length > 0) {
       Object.entries(dyn).forEach(([key, content], idx) => {
         const title = key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+        const lowerTitle = title.toLowerCase();
+
         docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
         docChildren.push(...convertHtmlToParagraphs(content as string, title));
+
+        // Supplement Section 17 with structured Work Packages
+        if ((lowerTitle.includes("work package") || lowerTitle.includes("design and implementation")) && p.workPackages?.length > 0) {
+          docChildren.push(createParagraph("Detailed Work Package Summary:", { bold: true, italic: true, color: COLOR_PRIMARY }));
+          docChildren.push(createWorkPackageTable(p.workPackages));
+        }
       });
     } else {
       // Legacy Fallback
@@ -389,7 +471,6 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     // 5. STRUCTURED DATA: BUDGET
     if (p.budget && p.budget.length > 0) {
       docChildren.push(createSectionHeader("Project Budget Breakdown", 2));
-      const currency = p.settings?.currency || "EUR";
 
       const budgetRows = [
         new TableRow({
@@ -403,7 +484,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
           children: [
             new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.item, bold: true, font: FONT, size: BODY_SIZE })] })] }),
             new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.description || "-", font: FONT, size: BODY_SIZE })] })] }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: item.cost.toLocaleString(), font: FONT, size: BODY_SIZE })], alignment: AlignmentType.RIGHT })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: `${item.cost.toLocaleString()} ${currency}`, font: FONT, size: BODY_SIZE })], alignment: AlignmentType.RIGHT })] }),
           ]
         }))
       ];
@@ -411,6 +492,39 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
       docChildren.push(new Table({
         width: { size: 100, type: WidthType.PERCENTAGE },
         rows: budgetRows,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
+        }
+      }));
+    }
+
+    // 6. RISKS
+    if (p.risks && p.risks.length > 0) {
+      docChildren.push(createSectionHeader("Risk Management", 2));
+      const riskRows = [
+        new TableRow({
+          children: [
+            createTableHeaderCell("Risk"),
+            createTableHeaderCell("Impact"),
+            createTableHeaderCell("Mitigation Measures"),
+          ]
+        }),
+        ...p.risks.map(r => new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.risk, bold: true, font: FONT, size: BODY_SIZE })] })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.impact, font: FONT, size: BODY_SIZE })], alignment: AlignmentType.CENTER })] }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.mitigation, font: FONT, size: BODY_SIZE })] })] }),
+          ]
+        }))
+      ];
+      docChildren.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: riskRows,
         borders: {
           top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
           bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
@@ -488,5 +602,6 @@ export async function exportToDocx(proposal: FullProposal): Promise<void> {
     alert("Professional Export failed: " + (error as Error).message);
   }
 }
+
 
 
