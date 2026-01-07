@@ -278,7 +278,18 @@ Return ONLY valid JSON, no other text.`;
             }
 
             const ai = getAI();
-            const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const model = ai.getGenerativeModel({
+                model: 'gemini-2.0-flash',
+                generationConfig: {
+                    temperature: 0.1,
+                },
+                safetySettings: [
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+                ]
+            });
 
             const prompt = PromptBuilder.buildProposalPrompt(
                 idea,
@@ -289,19 +300,26 @@ Return ONLY valid JSON, no other text.`;
                 fundingScheme
             );
 
+            console.log(`🚀 Generating proposal with Gemini 2.0 Flash. Prompt length: ${prompt.length} chars`);
+
             const result = await model.generateContent(prompt);
             const text = result.response.text();
 
+            if (!text) {
+                throw new Error("AI returned an empty response. This might be due to a safety filter or model timeout.");
+            }
+            console.log(`✅ AI responded with ${text.length} characters.`);
+
             let proposal;
+            const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
             try {
-                // Remove markdown code blocks if present
-                const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
                 proposal = JSON.parse(cleanedText);
             } catch (parseError: any) {
                 console.error('Initial JSON parse failed. Attempting repair...', parseError.message);
 
-                // Truncation repair: This is complex because the AI can cut off anywhere
-                let repairedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                // Truncation repair: Attempting to close open JSON structures
+                let repairedText = cleanedText;
 
                 // Remove trailing garbage that would prevent closing braces from working
                 repairedText = repairedText

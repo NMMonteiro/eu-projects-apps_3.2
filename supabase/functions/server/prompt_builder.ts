@@ -141,6 +141,36 @@ export function buildProposalPrompt(
   userPrompt?: string,
   fundingScheme?: any
 ): string {
+  // Helper to flatten sections and subsections
+  interface FlatSection {
+    key: string;
+    label: string;
+    description: string;
+    charLimit?: number;
+    aiPrompt?: string;
+  }
+
+  const flattenSections = (sections: any[]): FlatSection[] => {
+    let result: FlatSection[] = [];
+    sections.forEach(s => {
+      result.push({
+        key: s.key,
+        label: s.label,
+        description: s.description || '',
+        charLimit: s.charLimit,
+        aiPrompt: s.aiPrompt
+      });
+      if (s.subsections && s.subsections.length > 0) {
+        result = [...result, ...flattenSections(s.subsections)];
+      }
+    });
+    return result;
+  };
+
+  const allSections = fundingScheme?.template_json?.sections
+    ? flattenSections(fundingScheme.template_json.sections)
+    : [];
+
   const partnerInfo = partners.length > 0
     ? `\n\nCONSORTIUM PARTNERS:\n${partners.map(p => `- ${p.name}${p.acronym ? ` (${p.acronym})` : ''} - ${p.country || 'Country not specified'}${p.isCoordinator ? ' [LEAD COORDINATOR]' : ''}\n  - Profile: ${p.description || 'No description'}\n  - Expertise: ${p.experience || ''}\n  - Past Projects: ${p.relevantProjects || ''}`).join('\n')}`
     : '';
@@ -151,15 +181,15 @@ export function buildProposalPrompt(
 
   const dynamicSchemeInstructions = fundingScheme
     ? `\n\nFUNDING SCHEME TEMPLATE (${fundingScheme.name}):
-The proposal MUST follow this specific structure. Generate content for the following sections inside a "dynamicSections" object:
-${fundingScheme.template_json.sections.map((s: any) =>
-      `- ${s.label} (Key: "${s.key}"): ${s.description}${s.charLimit ? ` [Limit: ${s.charLimit} chars]` : ''}`
+The proposal MUST follow this specific structure. You MUST generate content for EVERY key listed below. DO NOT skip any keys.
+${allSections.map((s: FlatSection) =>
+      `- ${s.label} (Key: "${s.key}"): ${s.description}${s.charLimit ? ` [Limit: ${s.charLimit} chars]` : ''}${s.aiPrompt ? ` [Instruction: ${s.aiPrompt}]` : ''}`
     ).join('\n')}`
     : '';
 
   const dynamicOutputFormat = fundingScheme
     ? `\n  "dynamicSections": {
-${fundingScheme.template_json.sections.map((s: any) => `    "${s.key}": "<p>Content for ${s.label}...</p>"`).join(',\n')}
+${allSections.map((s: FlatSection) => `    "${s.key}": "<p>Detailed content for ${s.label}...</p>"`).join(',\n')}
   },`
     : '';
 
@@ -177,105 +207,60 @@ ${userRequirements}
 - Budget: ${constraints.budget || 'Not specified'}
 - Duration: ${constraints.duration || 'Not specified'}${partnerInfo}${dynamicSchemeInstructions}
 
-TASK: Generate a comprehensive but CONCISE funding proposal.${fundingScheme ? ' Follow the FUNDING SCHEME TEMPLATE structure provided above.' : ''}
-IMPORTANT: 
-- Keep each text section under 2000 characters.
-- Focus on quality over length. 
-- Avoid repeating context or generalities.
-- If you run out of space, ensure you close the JSON object properly.
+TASK: Generate a comprehensive and HIGHLY DETAILED funding proposal.${fundingScheme ? ' Follow the FUNDING SCHEME TEMPLATE structure provided above.' : ''}
 
-STRICT ADHERENCE RULES (MANDATORY):
-1. 🚨 HIGHEST PRIORITY: You MUST STRICTLY ADHERE to all instructions in the "MANDATORY USER REQUIREMENTS" section.
-   - If the user specifies a BUDGET (e.g. "€250,000"), the TOTAL project budget MUST BE EXACTLY that amount (no more, no less). Adjust person-months or activities to match this total exactly.
-   - If the user specifies a DURATION (e.g. "12 months"), the project timeline MUST be exactly that length.
-   - If specific partners, technologies, or objectives are mentioned, they MUST be included.
-   - User-defined constraints OVERRIDE any other defaults or inferred values.
-2. All sections must align perfectly with the selected project idea and user requirements.
-3. Use HTML formatting for text sections (<p>, <strong>, <ul>, <li>, etc.)
-4. Generate a realistic budget in Euros with detailed breakdowns that sum up to the target budget.
-5. Create specific work packages with deliverables that fit within the specified duration.
-6. Include risk assessment matrix.
-7. Generate monthly timeline matching the specified duration.
-8. Include a detailed Dissemination & Communication strategy.
+CRITICAL INSTRUCTIONS:
+1. **NO EMPTY SECTIONS**: You must provide rich, technical, and persuasive content for EVERY section and subsection key provided in the "dynamicSections" format. If a section seems redundant (like "English Translation" when the project is already in English), acknowledge it briefly or merge relevant summary content, but do not leave it blank. Specifically, if the project is in English, skip the secondary translation text and focus on the main summary.
+2. **RELEVANCE & IMPACT**: These sections must be exceptionally detailed. Provide a fundamental explanation of needs analysis, target groups, and long-term systemic impact. 
+3. **VERBATIM QUESTIONS**: Check the descriptions/instructions for each section and ensure you answer every verbatim question asked in the guidelines.
+4. **STYLE**: Use HTML formatting (<p>, <strong>, <ul>, <li>).
+5. **JSON INTEGRITY**: Return ONLY valid JSON. If the content is long, prioritize completing the JSON structure.
+
+STRICT ADHERENCE RULES:
+- If a budget is specified in requirements, the total in the budget table must match exactly.
+- Each narrative section should be around 1500-2500 characters of high-quality text unless a limit is specified.
 
 OUTPUT FORMAT (JSON ONLY, no markdown):
 {
   "title": "${idea.title}",
-  "summary": "<p>Executive summary...</p>",${dynamicOutputFormat}
-  "relevance": "<p>Why this project is relevant...</p>",
-  "impact": "<p>Expected impact...</p>",
-  "methods": "<p>Methodology...</p>",
-  "introduction": "<p>Introduction...</p>",
-  "objectives": "<p>Project objectives...</p>",
-  "methodology": "<p>Detailed methodology...</p>",
-  "expectedResults": "<p>Expected results...</p>",
-  "innovation": "<p>Innovation aspects...</p>",
-  "sustainability": "<p>Sustainability plan...</p>",
-  "consortium": "<p>Consortium description...</p>",
-  "workPlan": "<p>Work plan...</p>",
-  "riskManagement": "<p>Risk management...</p>",
-  "dissemination": "<p>Dissemination and communication strategy...</p>",
+  "summary": "<p>Detailed executive summary...</p>",${dynamicOutputFormat}
+  "relevance": "<p>Broad overview of relevance (if not covered in dynamicSections)...</p>",
+  "impact": "<p>Broad overview of impact (if not covered in dynamicSections)...</p>",
   "partners": [
     { 
       "name": "Partner Name", 
-      "acronym": "ACR",
       "role": "Role in project", 
       "isCoordinator": true,
-      "country": "Country",
       "description": "Short description of role and contributions" 
     }
   ],
   "workPackages": [
     {
-      "name": "WP1: Work Package Name",
-      "description": "Description",
-      "deliverables": ["Deliverable 1", "Deliverable 2"]
-    }
-  ],
-  "milestones": [
-    {
-      "milestone": "Milestone description",
-      "workPackage": "WP1",
-      "dueDate": "Month 6"
+      "name": "WP1: Project Management",
+      "description": "Detailed description of management and coordination",
+      "deliverables": ["Grant Agreement", "Project Management Plan"]
     }
   ],
   "risks": [
     {
-      "risk": "Risk description",
-      "likelihood": "Low|Medium|High",
-      "impact": "Low|Medium|High",
-      "mitigation": "Mitigation strategy"
+      "risk": "Technical failure",
+      "likelihood": "Low",
+      "impact": "High",
+      "mitigation": "Redundancy and expert review"
     }
   ],
   "budget": [
     {
       "item": "Personnel",
-      "cost": 500000,
-      "description": "Project staff costs",
-      "breakdown": [
-        { "subItem": "Project Manager", "quantity": 1, "unitCost": 80000, "total": 80000 },
-        { "subItem": "Researchers", "quantity": 5, "unitCost": 70000, "total": 350000 }
-      ]
-    },
-    {
-      "item": "Dissemination",
-      "cost": 50000,
-      "description": "Dissemination and communication activities",
-      "breakdown": [
-        { "subItem": "Website & Social Media", "quantity": 1, "unitCost": 10000, "total": 10000 },
-        { "subItem": "Events & Conferences", "quantity": 4, "unitCost": 10000, "total": 40000 }
-      ]
+      "cost": 0,
+      "description": "Staff costs breakdown",
+      "breakdown": []
     }
   ],
   "timeline": [
-    {
-      "phase": "Phase 1: Setup",
-      "activities": ["Activity 1", "Activity 2"],
-      "startMonth": 1,
-      "endMonth": 6
-    }
+    { "phase": "M1-M6: Setup", "activities": ["Kick-off", "Requirement gathering"], "startMonth": 1, "endMonth": 6 }
   ]
 }
 
-Return ONLY valid JSON, no other text.`;
+Return ONLY valid JSON.`;
 }
