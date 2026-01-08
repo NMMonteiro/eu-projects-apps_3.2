@@ -414,10 +414,15 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     const partnerIds = data.partners.map((p: any) => p.id).filter(Boolean);
                     if (partnerIds.length > 0) {
                         console.log("Hydrating partners with IDs:", partnerIds);
-                        const { data: dbPartners } = await supabase
+                        const { data: dbPartners, error: partnersError } = await supabase
                             .from('partners')
                             .select('*')
                             .in('id', partnerIds);
+
+                        if (partnersError) {
+                            console.error('Partner hydration query failed:', partnersError);
+                            return;
+                        }
 
                         if (dbPartners && dbPartners.length > 0) {
                             console.log(`Found ${dbPartners.length} matching partners in DB. Merging technical metadata...`);
