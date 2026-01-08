@@ -226,12 +226,13 @@ CRITICAL INSTRUCTIONS:
 STRICT ADHERENCE RULES:
 - If a budget total is specified in requirements (e.g. €250,000), the sum of all costs in the budget table MUST MATCH EXACTLY.
 - MANDATORY ITEMS & REALISTIC RESEARCH: If the user requirements mention specific items (e.g. "10 VR sets", "AI tools", "hosting"), you MUST include these with realistic current market pricing.
-- DETAILED BREAKDOWN: Every main budget item MUST have at least 2-3 specific sub-items in the "breakdown" array.
+- DETAILED BREAKDOWN: Every main budget item MUST have specific sub-items in the "breakdown" array. Keep sub-items to max 5 per category to avoid output truncation.
 - CATEGORIES TO INCLUDE: Hardware, Software Licences/Subscriptions (AI apps, etc.), Domains/Hosting, Travel & Subsistence, Dissemination Costs, and Staff/Expert Rates.
 - Each narrative section MUST be exceptionally detailed and technical (approx 3-5 rich paragraphs). DO NOT be concise; prioritize depth and persuasiveness.
 - Start Date must be after January 2026.
 - Remove all "(dd/mm/yyyy)" placeholders.
 - Format all euro amounts as €XX,XXX.
+- TOKEN SAFETY: If the proposal is exceptionally long, prioritize quality over extreme length to ensure the JSON structure is completed before reaching token limits.
 
 
 OUTPUT FORMAT (JSON ONLY, no markdown):

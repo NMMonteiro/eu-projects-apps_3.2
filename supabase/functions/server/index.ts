@@ -421,9 +421,29 @@ Return ONLY valid JSON, no other text.`;
                 } catch (secondError: any) {
                     console.error('Advanced JSON repair failed:', secondError.message);
                     try {
-                        const lastGoodIndex = repairedText.lastIndexOf('",');
+                        // Aggressive search for the last valid punctuation that could mark a logical break
+                        // We look for the last field completion: }, ], ", or a number followed by comma
+                        const patterns = [/},\s*/g, /], \s*/g, /",\s*/g, /:\s*\d+,\s*/g, /true,\s*/g, /false,\s*/g];
+                        let lastGoodIndex = -1;
+
+                        patterns.forEach(regex => {
+                            let match;
+                            while ((match = regex.exec(repairedText)) !== null) {
+                                lastGoodIndex = Math.max(lastGoodIndex, match.index + match[0].length - 1);
+                            }
+                        });
+
+                        // Fallback to just the last brace or bracket if nothing else found
+                        if (lastGoodIndex === -1) {
+                            lastGoodIndex = Math.max(repairedText.lastIndexOf('}'), repairedText.lastIndexOf(']'));
+                        }
+
                         if (lastGoodIndex !== -1) {
+                            // Trim to the last known-good comma or closing punctuation
                             repairedText = repairedText.substring(0, lastGoodIndex + 1);
+                            // Cleanup trailing comma if we cut right after one
+                            repairedText = repairedText.replace(/,\s*$/, '');
+
                             const oBraces = (repairedText.match(/{/g) || []).length;
                             const cBraces = (repairedText.match(/}/g) || []).length;
                             const oBrackets = (repairedText.match(/\[/g) || []).length;
@@ -432,13 +452,14 @@ Return ONLY valid JSON, no other text.`;
                             let finalSuffix = '';
                             for (let i = 0; i < (oBrackets - cBrackets); i++) finalSuffix += ']';
                             for (let i = 0; i < (oBraces - cBraces); i++) finalSuffix += '}';
+
                             proposal = JSON.parse(repairedText + finalSuffix);
-                            console.log('Aggressive JSON repair successful!');
+                            console.log('Aggressive Ultra-Repair successful!');
                         } else {
-                            throw new Error('Could not find a safe truncation point.');
+                            throw new Error('Could not find any safe truncation point in the response.');
                         }
                     } catch (finalError) {
-                        throw new Error(`JSON parsing failed after all repairs. Length: ${text.length}. Sample: ${cleanedText.substring(cleanedText.length - 200)}`);
+                        throw new Error(`Critical JSON failure. AI output truncated mid-nesting. Length: ${text.length}. Hint: Try asking for a more concise version or fewer partners.`);
                     }
                 }
             }
