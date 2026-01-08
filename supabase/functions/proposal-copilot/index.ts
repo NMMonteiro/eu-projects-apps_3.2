@@ -148,6 +148,11 @@ Deno.serve(async (req) => {
                 
 IMPORTANT: If the user asks to "redo", "rewrite", "update", or "change" a specific section (e.g., "redo the methodology", "update the risks"), you MUST perform the update.
 
+STRICT FORMATTING & LOGIC RULES:
+1. All Project Start Dates MUST be in the future (Current context: Jan 2026).
+2. DO NOT include "(dd/mm/yyyy)" in any labels or headers.
+3. Currency MUST always be formatted with the symbol first and thousands separators, e.g., "€60,000".
+
 To perform an update, your response MUST be a JSON object with this structure:
 {
   "action": "update_section",

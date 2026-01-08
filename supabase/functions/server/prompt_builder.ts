@@ -207,6 +207,13 @@ ${userRequirements}
 - Budget: ${constraints.budget || 'Not specified'}
 - Duration: ${constraints.duration || 'Not specified'}${partnerInfo}${dynamicSchemeInstructions}
 
+CURRENT CONTEXTUAL DATE: January 2026
+STRICT DATE RULES:
+1. All Project Start Dates MUST be in the future (after January 2026).
+2. DO NOT include "(dd/mm/yyyy)" in any labels or headers (e.g., use "Project Start Date:" instead of "Project Start Date (dd/mm/yyyy):").
+3. Currency MUST always be formatted with the symbol first and thousands separators, e.g., "€60,000" instead of "60000 €".
+
+
 TASK: Generate a comprehensive and HIGHLY DETAILED funding proposal.${fundingScheme ? ' Follow the FUNDING SCHEME TEMPLATE structure provided above.' : ''}
 
 CRITICAL INSTRUCTIONS:
@@ -219,6 +226,10 @@ CRITICAL INSTRUCTIONS:
 STRICT ADHERENCE RULES:
 - If a budget is specified in requirements, the total in the budget table must match exactly.
 - Each narrative section should be around 1500-2500 characters of high-quality text unless a limit is specified.
+- Use logical dates: Start date must be after Jan 2026. If duration is 18 months, end date must be exactly 18 months after start date.
+- Remove all "(dd/mm/yyyy)" placeholders from text.
+- Format all euro amounts as €XX,XXX.
+
 
 OUTPUT FORMAT (JSON ONLY, no markdown):
 {
