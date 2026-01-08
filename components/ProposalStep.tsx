@@ -61,7 +61,16 @@ export function ProposalStep({
             });
 
             if (!response.ok) {
-                throw new Error('Failed to generate proposal');
+                let errorMessage = 'Failed to generate proposal';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorData.error || errorMessage;
+                } catch (e) {
+                    // Fallback to text if not JSON
+                    const errorText = await response.text().catch(() => '');
+                    if (errorText) errorMessage = errorText.substring(0, 100);
+                }
+                throw new Error(errorMessage);
             }
 
             const data: FullProposal = await response.json();

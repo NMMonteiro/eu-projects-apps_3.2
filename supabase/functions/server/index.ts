@@ -324,10 +324,10 @@ Return ONLY valid JSON, no other text.`;
 
             const ai = getAI();
             const model = ai.getGenerativeModel({
-                model: 'gemini-2.0-flash',
+                model: 'gemini-1.5-flash',
                 generationConfig: {
                     temperature: 0.2,
-                    maxOutputTokens: 8192
+                    maxOutputTokens: 4096 // Reduced further to ensure completion within Supabase 60s window
                 },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -348,11 +348,16 @@ Return ONLY valid JSON, no other text.`;
 
             console.log(`🚀 Generating proposal with Gemini 2.0 Flash. Prompt length: ${prompt.length} chars`);
 
-            const result = await model.generateContent(prompt);
+            const startTime = Date.now();
+            const result = await model.generateContent(prompt).catch(e => {
+                console.error('AI generation call failed:', e);
+                throw new Error(`AI generation failed: ${e.message}`);
+            });
             const text = result.response.text();
+            console.log(`✅ AI responded in ${((Date.now() - startTime) / 1000).toFixed(1)}s with ${text.length} characters.`);
 
             if (!text) {
-                throw new Error("AI returned an empty response. This might be due to a safety filter or model timeout.");
+                throw new Error("AI returned an empty response.");
             }
             console.log(`✅ AI responded with ${text.length} characters.`);
 

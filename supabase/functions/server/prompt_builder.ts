@@ -224,14 +224,12 @@ CRITICAL INSTRUCTIONS:
 5. **JSON INTEGRITY**: Return ONLY valid JSON. If the content is long, prioritize completing the JSON structure.
 
 STRICT ADHERENCE RULES:
-- If a budget total is specified in requirements (e.g. €250,000), the sum of all costs in the budget table MUST MATCH EXACTLY.
-- MANDATORY ITEMS & REALISTIC RESEARCH: If the user requirements mention specific items (e.g. "10 VR sets", "AI tools", "hosting"), you MUST include these with realistic current market pricing (VR headsets ~€500-€700 each, hosting ~€500-€2000/year, etc.).
-- DETAILED BREAKDOWN: Every main budget item MUST have at least 2-3 specific sub-items in the "breakdown" array (e.g., "Personnel" should break down into "Senior Researcher", "Project Admin", etc., each with quantity (months/units) and unit cost).
-- CATEGORIES TO INCLUDE: Hardware, Software Licences/Subscriptions (AI apps, etc.), Domains/Hosting, Travel & Subsistence, Dissemination Costs, and Staff/Expert Rates.
-- Each narrative section should provide detailed, technical content (approx 3-4 paragraphs).
+- If a budget total is specified, the sum of all costs MUST MATCH EXACTLY.
+- MANDATORY ITEMS: Include specific items like VR sets, AI tools, and hosting with realistic 2026 pricing.
+- DETAILED BREAKDOWN: Provide sub-items for Personnel, Hardware, and software.
+- CONTENT LENGTH: Each section should be 2-3 high-quality, professional paragraphs. Avoid excessive wordiness to ensure technical precision.
 - Start Date must be after January 2026.
-- Remove all "(dd/mm/yyyy)" placeholders.
-- Format all euro amounts as €XX,XXX.
+- Format euro amounts as €XX,XXX.
 
 
 OUTPUT FORMAT (JSON ONLY, no markdown):
