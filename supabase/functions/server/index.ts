@@ -324,10 +324,10 @@ Return ONLY valid JSON, no other text.`;
 
             const ai = getAI();
             const model = ai.getGenerativeModel({
-                model: 'gemini-1.5-flash',
+                model: 'gemini-2.0-flash',
                 generationConfig: {
                     temperature: 0.2,
-                    maxOutputTokens: 4096 // Reduced further to ensure completion within Supabase 60s window
+                    maxOutputTokens: 8192 // Restored to full capacity for best quality
                 },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
