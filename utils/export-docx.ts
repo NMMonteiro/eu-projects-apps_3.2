@@ -449,6 +449,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     let renderedWorkPackages = false;
     let renderedBudget = false;
     let renderedRisks = false;
+    const renderedWPIndices = new Set<number>();
 
     const docChildren: any[] = [];
 
@@ -595,13 +596,17 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
               const wpIdx = parseInt(wpMatch[1]) - 1;
               if (p.workPackages[wpIdx]) {
                 const wp = p.workPackages[wpIdx];
-                docChildren.push(createParagraph(`Work Package ${wpIdx + 1}: ${wp.name}`, { bold: true, italic: true, color: COLOR_PRIMARY }));
+                renderedWPIndices.add(wpIdx);
+                // Check if all are rendered
+                if (renderedWPIndices.size === p.workPackages.length) renderedWorkPackages = true;
+                docChildren.push(createParagraph(`Detailed implementation for ${wp.name}:`, { bold: true, italic: true, color: COLOR_PRIMARY }));
                 docChildren.push(createWorkPackageTable([wp]));
               }
             } else if (!renderedWorkPackages) {
               renderedWorkPackages = true;
-              docChildren.push(createParagraph("Work Package Overview:", { bold: true, italic: true, color: COLOR_PRIMARY }));
+              docChildren.push(createParagraph("Work Package Overview and Distribution:", { bold: true, italic: true, color: COLOR_PRIMARY }));
               docChildren.push(createWorkPackageTable(p.workPackages));
+              p.workPackages.forEach((_, i) => renderedWPIndices.add(i));
             }
           } else if (isBudget && p.budget?.length > 0 && !renderedBudget) {
             renderedBudget = true;
@@ -631,17 +636,29 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
 
     docChildren.push(new Paragraph({ children: [new PageBreak()] }));
 
-    // 4. FALLBACKS
-    if (!renderedPartnersDetailed || !renderedBudget || !renderedRisks) {
-      docChildren.push(createSectionHeader("Part C: Consortium and Resources", 1));
+    // 4. FALLBACKS (Ensure no structured data is lost if template sections missed them)
+    if (!renderedPartnersDetailed || !renderedBudget || !renderedRisks || !renderedWorkPackages) {
+      docChildren.push(new Paragraph({ children: [new PageBreak()] }));
+      docChildren.push(createSectionHeader("Annex: Additional Structured Data", 1));
+
+      if (p.workPackages && p.workPackages.length > 0 && !renderedWorkPackages) {
+        const remainingWPs = p.workPackages.filter((_, i) => !renderedWPIndices.has(i));
+        if (remainingWPs.length > 0) {
+          docChildren.push(createSectionHeader("Implementation Plan (Work Packages)", 2));
+          docChildren.push(createWorkPackageTable(remainingWPs));
+          renderedWorkPackages = true;
+        }
+      }
+
       if (p.partners && p.partners.length > 0 && !renderedPartnersDetailed) {
-        docChildren.push(createSectionHeader("Consortium Partners", 2));
+        docChildren.push(createSectionHeader("Consortium Partners Details", 2));
         docChildren.push(createPartnerListTable(p.partners.map(normalizePartner)));
         p.partners.forEach((pt, i) => {
           const partner = normalizePartner(pt);
           docChildren.push(createSectionHeader(`${i + 1}. ${partner.name}`, 3));
           docChildren.push(createDetailedPartnerProfile(partner));
         });
+        renderedPartnersDetailed = true;
       }
       if (p.budget && p.budget.length > 0 && !renderedBudget) {
         docChildren.push(createSectionHeader("Project Budget", 2));

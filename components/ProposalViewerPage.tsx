@@ -123,6 +123,133 @@ const ResponsiveSectionContent = ({ content }: { content: string }) => {
     return <div dangerouslySetInnerHTML={{ __html: processed }} />;
 };
 
+const DynamicWorkPackageSection = ({ workPackages, limitToIndex }: { workPackages: any[], limitToIndex?: number }) => {
+    if (!workPackages || workPackages.length === 0) {
+        return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">No work packages defined yet.</div>;
+    }
+
+    const displayWPs = limitToIndex !== undefined ? [workPackages[limitToIndex]].filter(Boolean) : workPackages;
+
+    if (displayWPs.length === 0) return null;
+
+    return (
+        <div className="space-y-6">
+            {displayWPs.map((wp, i) => {
+                const actualIndex = limitToIndex !== undefined ? limitToIndex : i;
+                return (
+                    <Card key={actualIndex} className="bg-card/30 border-border/40">
+                        <CardHeader className="pb-2">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <Badge variant="outline" className="mb-2 border-primary/30 text-primary">WP {actualIndex + 1}</Badge>
+                                    <CardTitle className="text-lg">{wp.name}</CardTitle>
+                                </div>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: wp.description }} />
+                            {wp.deliverables && wp.deliverables.length > 0 && (
+                                <div className="bg-secondary/30 rounded-lg p-4">
+                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-2">Deliverables</h5>
+                                    <ul className="space-y-1.5">
+                                        {wp.deliverables.map((del: string, dIdx: number) => (
+                                            <li key={dIdx} className="flex items-start gap-2 text-sm">
+                                                <CheckCircle2 className="h-4 w-4 text-green-500/60 mt-0.5 shrink-0" />
+                                                <span className="text-muted-foreground/90">{del}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                );
+            })}
+        </div>
+    );
+};
+
+const DynamicBudgetSection = ({ budget, currency }: { budget: any[], currency: string }) => {
+    if (!budget || budget.length === 0) return null;
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount);
+    };
+
+    const total = budget.reduce((sum, item) => sum + (item.cost || 0), 0);
+
+    return (
+        <div className="space-y-4">
+            <div className="border rounded-xl overflow-hidden border-border/40 bg-card/20">
+                <table className="w-full text-sm border-collapse">
+                    <thead className="bg-secondary/40">
+                        <tr className="border-b border-border/40">
+                            <th className="text-left py-3 px-4 font-semibold text-foreground/70 w-1/2">Item & Description</th>
+                            <th className="text-right py-3 px-4 font-semibold text-foreground/70">Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/20">
+                        {budget.map((item, i) => (
+                            <tr key={i} className="hover:bg-white/5 transition-colors">
+                                <td className="py-3 px-4">
+                                    <div className="font-medium text-foreground/90">{item.item}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">{item.description}</div>
+                                </td>
+                                <td className="py-3 px-4 text-right font-mono text-primary/90">
+                                    {formatCurrency(item.cost)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot className="bg-primary/5">
+                        <tr className="font-bold border-t border-primary/20">
+                            <td className="py-3 px-4 text-foreground/90">Total Estimated Budget</td>
+                            <td className="py-3 px-4 text-right font-mono text-primary">
+                                {formatCurrency(total)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+const DynamicRiskSection = ({ risks }: { risks: any[] }) => {
+    if (!risks || risks.length === 0) return null;
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {risks.map((risk, i) => (
+                <Card key={i} className="bg-card/30 border-border/40 hover:border-primary/20 transition-all">
+                    <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                            <CardTitle className="text-sm font-bold text-foreground/90">{risk.risk}</CardTitle>
+                            <Badge variant={risk.impact?.toLowerCase().includes('high') ? 'destructive' : 'secondary'} className="text-[9px] uppercase">
+                                {risk.impact} Impact
+                            </Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">Likelihood:</span>
+                            <span className="font-medium">{risk.likelihood}</span>
+                        </div>
+                        <div className="pt-2 border-t border-border/20">
+                            <span className="text-[10px] uppercase font-bold text-primary/70 block mb-1">Mitigation Strategy</span>
+                            <p className="text-xs text-muted-foreground leading-relaxed italic">"{risk.mitigation}"</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+        </div>
+    );
+};
+
 const DynamicPartnerSection = ({ partners }: { partners: import('../types/partner').Partner[] }) => {
     if (!partners || partners.length === 0) {
         return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">No partners added yet. Please add partners in the 'Structured Data' tab to populate this section.</div>;
@@ -133,46 +260,58 @@ const DynamicPartnerSection = ({ partners }: { partners: import('../types/partne
                 <Card key={i} className="bg-card/50 border-border/60">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-lg text-primary flex items-center justify-between">
-                            {p.name}
-                            {p.role && <Badge variant="outline" className="ml-2">{p.role}</Badge>}
+                            <div className="flex items-center gap-2">
+                                <Building2 className="h-5 w-5 opacity-70" />
+                                {p.name}
+                            </div>
+                            {p.isCoordinator && <Badge className="bg-primary/20 text-primary border-primary/30">Coordinator</Badge>}
                         </CardTitle>
-                        {p.country && <CardDescription>{p.country}</CardDescription>}
+                        {p.country && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Globe className="h-3 w-3" />
+                                {p.country} {p.city ? `(${p.city})` : ''}
+                            </div>
+                        )}
                     </CardHeader>
-                    <CardContent className="space-y-4 text-sm">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <CardContent className="space-y-4 text-sm mt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-secondary/20 p-4 rounded-xl border border-border/40">
                             {p.organisationId && (
                                 <div className="flex flex-col">
-                                    <span className="font-semibold text-xs uppercase text-muted-foreground">OID</span>
-                                    <span>{p.organisationId}</span>
-                                </div>
-                            )}
-                            {p.website && (
-                                <div className="flex flex-col">
-                                    <span className="font-semibold text-xs uppercase text-muted-foreground">Website</span>
-                                    <a href={p.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
-                                        {p.website}
-                                    </a>
+                                    <span className="font-bold text-[10px] uppercase text-primary/70 tracking-wider">OID / PIC</span>
+                                    <span className="font-mono text-xs">{p.organisationId}</span>
                                 </div>
                             )}
                             {p.organizationType && (
                                 <div className="flex flex-col">
-                                    <span className="font-semibold text-xs uppercase text-muted-foreground">Type</span>
-                                    <span>{p.organizationType}</span>
+                                    <span className="font-bold text-[10px] uppercase text-primary/70 tracking-wider">Type</span>
+                                    <span className="truncate">{p.organizationType}</span>
+                                </div>
+                            )}
+                            {p.website && (
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-[10px] uppercase text-primary/70 tracking-wider">Website</span>
+                                    <a href={p.website} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary transition-colors underline decoration-primary/30 truncate">
+                                        {p.website.replace(/^https?:\/\//, '')}
+                                    </a>
                                 </div>
                             )}
                         </div>
 
                         {p.description && (
                             <div>
-                                <div className="font-semibold text-xs uppercase text-muted-foreground mb-1">Background</div>
-                                <div className="text-foreground/90 whitespace-pre-wrap">{p.description}</div>
+                                <div className="font-bold text-[10px] uppercase text-primary/70 tracking-wider mb-1">Institutional Profile</div>
+                                <div className="text-muted-foreground/90 text-xs leading-relaxed line-clamp-4 hover:line-clamp-none transition-all cursor-default">
+                                    {p.description}
+                                </div>
                             </div>
                         )}
 
                         {p.experience && (
-                            <div className="pt-2 border-t border-border/50">
-                                <div className="font-semibold text-xs uppercase text-muted-foreground mb-1">Experience</div>
-                                <div className="text-foreground/90 whitespace-pre-wrap">{p.experience}</div>
+                            <div className="pt-3 border-t border-border/30">
+                                <div className="font-bold text-[10px] uppercase text-primary/70 tracking-wider mb-1">Relevant Expertise</div>
+                                <div className="text-muted-foreground/90 text-xs leading-relaxed italic line-clamp-3 hover:line-clamp-none transition-all cursor-default">
+                                    {p.experience}
+                                </div>
                             </div>
                         )}
                     </CardContent>
@@ -796,15 +935,27 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     }
 
     // Build sections array including custom sections and aligning with funding scheme template
-    let baseSections: { id: string; title: string; content: string | undefined; type?: string }[] = [];
+    let baseSections: { id: string; title: string; content: string | undefined; type?: string; level?: number }[] = [];
     const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
     const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
-
     if (fundingScheme?.template_json?.sections) {
+        const renderedWPIndices = new Set<number>();
+
         // Function to recursively flatten template sections with level and description
         const processTemplateSections = (templateSections: any[], level = 1): any[] => {
             let flattened: any[] = [];
             [...templateSections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
+                const lowerKey = ts.key?.toLowerCase() || "";
+                const lowerLabel = ts.label?.toLowerCase() || "";
+                const isWP = lowerKey.includes('work_package') || lowerLabel.includes('work package');
+
+                if (isWP) {
+                    const match = lowerKey.match(/work_package_(\d+)/i) || lowerLabel.match(/work package (\d+)/i);
+                    if (match) {
+                        renderedWPIndices.add(parseInt(match[1]) - 1);
+                    }
+                }
+
                 flattened.push({
                     id: ts.key,
                     title: ts.label,
@@ -821,6 +972,21 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         };
 
         baseSections = processTemplateSections(fundingScheme.template_json.sections);
+
+        // Add missing Work Packages if they exist in structured data but weren't in template
+        if (proposal.workPackages && proposal.workPackages.length > 0) {
+            proposal.workPackages.forEach((wp, idx) => {
+                if (!renderedWPIndices.has(idx)) {
+                    baseSections.push({
+                        id: `work_package_${idx + 1}`,
+                        title: wp.name || `Work Package ${idx + 1}`,
+                        content: wp.description,
+                        type: 'work_package',
+                        level: 2
+                    });
+                }
+            });
+        }
     } else if (Object.keys(dynamicSections).length > 0) {
         baseSections = Object.entries(dynamicSections).map(([key, content], idx) => ({
             id: key,
@@ -1108,6 +1274,24 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                     section.id === 'partner_organisations' ||
                                     section.id === 'participating_organisations';
 
+                                const isWPSection =
+                                    section.title.toLowerCase().includes('work package') ||
+                                    section.title.toLowerCase().includes('workpackage') ||
+                                    section.id.toLowerCase().includes('work_package') ||
+                                    section.id.toLowerCase().includes('workpackage') ||
+                                    section.id === 'workPlan' ||
+                                    section.id === 'tasks';
+
+                                const isBudgetSection =
+                                    section.title.toLowerCase().includes('budget') ||
+                                    section.id.toLowerCase().includes('budget') ||
+                                    section.id === 'financial_overview';
+
+                                const isRiskSection =
+                                    section.title.toLowerCase().includes('risk') ||
+                                    section.id.toLowerCase().includes('risk') ||
+                                    section.id === 'riskManagement';
+
                                 return (
                                     <div key={section.id} id={section.id} className="scroll-mt-24">
                                         <Card className={`bg-card/30 border-border/40 hover:border-primary/20 transition-colors ${section.level > 1 ? 'ml-6 border-l-2' : ''}`}>
@@ -1137,6 +1321,38 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                             <CardContent>
                                                 {isPartnerSection ? (
                                                     <DynamicPartnerSection partners={proposal?.partners || []} />
+                                                ) : isWPSection && proposal.workPackages && proposal.workPackages.length > 0 ? (
+                                                    <div className="space-y-6">
+                                                        {/* If there's specific narrative content, show it first */}
+                                                        {section.content && section.content.length > 50 && (
+                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
+                                                                <ResponsiveSectionContent content={section.content} />
+                                                            </div>
+                                                        )}
+                                                        {(() => {
+                                                            const match = section.id.match(/work_package_(\d+)/i) || section.title.toLowerCase().match(/work package (\d+)/i);
+                                                            const wpIdx = match ? parseInt(match[1]) - 1 : undefined;
+                                                            return <DynamicWorkPackageSection workPackages={proposal.workPackages} limitToIndex={wpIdx} />;
+                                                        })()}
+                                                    </div>
+                                                ) : isBudgetSection && proposal.budget && proposal.budget.length > 0 ? (
+                                                    <div className="space-y-6">
+                                                        {section.content && section.content.length > 50 && (
+                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
+                                                                <ResponsiveSectionContent content={section.content} />
+                                                            </div>
+                                                        )}
+                                                        <DynamicBudgetSection budget={proposal.budget} currency={settings.currency} />
+                                                    </div>
+                                                ) : isRiskSection && proposal.risks && proposal.risks.length > 0 ? (
+                                                    <div className="space-y-6">
+                                                        {section.content && section.content.length > 50 && (
+                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
+                                                                <ResponsiveSectionContent content={section.content} />
+                                                            </div>
+                                                        )}
+                                                        <DynamicRiskSection risks={proposal.risks} />
+                                                    </div>
                                                 ) : (
                                                     <div className="overflow-x-auto pb-4">
                                                         <div className="prose prose-invert prose-sm max-w-none prose-p:text-muted-foreground/90 prose-headings:text-foreground prose-strong:text-primary/90 prose-li:text-muted-foreground/90 [&_table]:min-w-[1000px] [&_table]:border-collapse [&_table]:text-xs [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top [&_tr]:border-b [&_tr]:border-border/50">
