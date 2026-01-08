@@ -115,6 +115,7 @@ export interface FullProposal {
   savedAt?: string;
   updatedAt?: string;
   settings?: ProposalSettings;
+  generationPrompt?: string;
 }
 
 export interface ProposalSettings {

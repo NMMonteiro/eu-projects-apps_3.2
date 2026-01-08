@@ -371,6 +371,9 @@ Return ONLY valid JSON, no other text.`;
                 }
             }
 
+            // Add the prompt to the proposal object
+            proposal.generationPrompt = prompt;
+
             // Add metadata
             proposal.id = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
             proposal.selectedIdea = idea;

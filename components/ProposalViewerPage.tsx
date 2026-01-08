@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Download, Share2, FileText, LayoutGrid, Users, Calendar, DollarSign, AlertTriangle, CheckCircle2, Layers, Plus, Trash2, Settings, ChevronDown, Folder, Edit, Sparkles, MoreHorizontal, MoreVertical, Building2, Globe, Mail } from 'lucide-react';
+import { ArrowLeft, Download, Share2, FileText, LayoutGrid, Users, Calendar, DollarSign, AlertTriangle, CheckCircle2, Layers, Plus, Trash2, Settings, ChevronDown, Folder, Edit, Sparkles, MoreHorizontal, MoreVertical, Building2, Globe, Mail, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -207,6 +207,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [editingContent, setEditingContent] = useState('');
     const [aiEditInstruction, setAiEditInstruction] = useState('');
     const [isAiEditing, setIsAiEditing] = useState(false);
+    const [showPrompt, setShowPrompt] = useState(false);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
@@ -786,9 +787,8 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" className="border-primary/20 hover:bg-primary/10 hover:text-primary">
-                        <Share2 className="h-4 w-4 mr-2" />
-                        Share
+                    <Button variant="ghost" onClick={() => setShowPrompt(true)} title="View Generation Prompt">
+                        <Terminal className="h-5 w-5" />
                     </Button>
                     {/* Settings Button */}
                     <Button variant="ghost" onClick={() => setIsSettingsOpen(true)}>
@@ -1798,6 +1798,20 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 onClose={() => setIsCopilotOpen(false)}
                 onProposalUpdate={loadProposal}
             />
+            {/* Prompt Dialog */}
+            <Dialog open={showPrompt} onOpenChange={setShowPrompt}>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-[#1E1E1E] text-white border-white/10 p-6">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Terminal className="h-5 w-5 text-primary" />
+                            Generation Prompt
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-4 p-4 rounded bg-black/50 font-mono text-xs whitespace-pre-wrap border border-white/5 selection:bg-primary/30">
+                        {proposal.generationPrompt || 'Prompt not available for this proposal.'}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

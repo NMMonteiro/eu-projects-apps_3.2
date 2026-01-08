@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Save, Download, Eye, ArrowLeft } from 'lucide-react';
+import { Loader2, Save, Download, Eye, ArrowLeft, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { serverUrl, publicAnonKey } from '../utils/supabase/info';
 import type { AnalysisResult, Idea, FullProposal } from '../types/proposal';
@@ -30,6 +31,7 @@ export function ProposalStep({
     const [proposal, setProposal] = useState<FullProposal | null>(null);
     const [generating, setGenerating] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [showPrompt, setShowPrompt] = useState(false);
     const hasStartedGeneration = React.useRef(false);
 
     useEffect(() => {
@@ -147,6 +149,10 @@ export function ProposalStep({
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setShowPrompt(true)} title="View AI Prompt">
+                        <Terminal className="h-4 w-4 mr-2" />
+                        Prompt
+                    </Button>
                     <Button variant="outline" onClick={onBack}>
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         Back
@@ -161,6 +167,21 @@ export function ProposalStep({
                     </Button>
                 </div>
             </div>
+
+            {/* Prompt Dialog */}
+            <Dialog open={showPrompt} onOpenChange={setShowPrompt}>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-[#1E1E1E] text-white border-white/10">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Terminal className="h-5 w-5 text-[#4472C4]" />
+                            Generation Prompt
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="mt-4 p-4 rounded bg-black/50 font-mono text-xs whitespace-pre-wrap border border-white/5">
+                        {proposal.generationPrompt || 'Prompt not available for this proposal.'}
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Quick Overview */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
