@@ -67,9 +67,36 @@ VALUES (
                 "aiPrompt": "Detail the Project Management work package. Focus on administrative efficiency, reporting cycles, and financial management protocols."
             },
             {
+                "key": "work_package_2",
+                "label": "Work package n°2 - Development",
+                "order": 8,
+                "mandatory": true,
+                "type": "structured",
+                "description": "Development of results, workshop organization, technical design.",
+                "aiPrompt": "Detail the second work package focused on core development and technical results."
+            },
+            {
+                "key": "work_package_3",
+                "label": "Work package n°3 - Implementation",
+                "order": 9,
+                "mandatory": true,
+                "type": "structured",
+                "description": "Piloting, testing, and implementation activities.",
+                "aiPrompt": "Detail the third work package focused on piloting and real-world testing."
+            },
+            {
+                "key": "work_package_4",
+                "label": "Work package n°4 - Dissemination",
+                "order": 10,
+                "mandatory": true,
+                "type": "structured",
+                "description": "Impact assessment, sustainability, and dissemination of results.",
+                "aiPrompt": "Detail the fourth work package focused on long-term impact and sharing results."
+            },
+            {
                 "key": "eu_values",
                 "label": "EU Values",
-                "order": 8,
+                "order": 11,
                 "mandatory": true,
                 "description": "Respect for human dignity, freedom, democracy, equality, the rule of law and human rights. Article 2 of the TEU and Article 21 of the EU Charter of Fundamental Rights.",
                 "aiPrompt": "Draft a statement on how the project adheres to and promotes EU Values (democracy, equality, human rights)."

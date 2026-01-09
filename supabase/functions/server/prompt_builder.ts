@@ -234,7 +234,7 @@ STRICT ADHERENCE RULES:
 - DETAILED BREAKDOWN: Every main budget item MUST have specific sub-items in the "breakdown" array. Keep sub-items to max 5 per category to avoid output truncation.
 - CATEGORIES TO INCLUDE: Hardware, Software Licences/Subscriptions (AI apps, etc.), Domains/Hosting, Travel & Subsistence, Dissemination Costs, and Staff/Expert Rates.
 - Each narrative section MUST be well-structured and technical (approx 2-3 paragraphs each). DO NOT be overly brief, but prioritize depth over sheer word count.
-- If the funding scheme has many sections (>10), keep each section focused and concise to ensure the entire JSON structure fits within the 8192 token output limit.
+- **EXACTLY 4 WORK PACKAGES**: You MUST generate exactly 4 unique Work Packages (WP1, WP2, WP3, WP4) in the "workPackages" array, even if the template doesn't explicitly list all of them. Each WP must have its own unique name, technical description, detailed activities (with lead partner and budget), and deliverables.
 - TOKEN SAFETY: If the proposal is exceptionally long, prioritize quality over extreme length to ensure the JSON structure is completed before reaching token limits.
 
 
@@ -255,19 +255,14 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
   "workPackages": [
     {
       "name": "WP1: Project Management",
-      "description": "Detailed description of management and coordination",
+      "description": "Detailed description...",
       "duration": "M1-M24",
-      "activities": [
-        { 
-          "name": "Kick-off Meeting", 
-          "description": "Organizing the internal launch event with all partners",
-          "leadPartner": "Lead Partner Name",
-          "participatingPartners": ["Partner A", "Partner B"],
-          "estimatedBudget": 5000
-        }
-      ],
-      "deliverables": ["Grant Agreement", "Project Management Plan"]
-    }
+      "activities": [{ "name": "...", "description": "...", "leadPartner": "...", "participatingPartners": ["..."], "estimatedBudget": 5000 }],
+      "deliverables": ["..."]
+    },
+    { "name": "WP2: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
+    { "name": "WP3: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
+    { "name": "WP4: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] }
   ],
   "risks": [
     {

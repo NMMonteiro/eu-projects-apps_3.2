@@ -123,14 +123,32 @@ const ResponsiveSectionContent = ({ content }: { content: string }) => {
     return <div dangerouslySetInnerHTML={{ __html: processed }} />;
 };
 
-const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency }: { workPackages: any[], limitToIndex?: number, currency?: string }) => {
+const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency, sectionTitle }: { workPackages: any[], limitToIndex?: number, currency?: string, sectionTitle?: string }) => {
     if (!workPackages || workPackages.length === 0) {
         return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">No work packages defined yet.</div>;
     }
 
-    const displayWPs = limitToIndex !== undefined ? [workPackages[limitToIndex]].filter(Boolean) : workPackages;
+    let displayWPs = limitToIndex !== undefined ? [workPackages[limitToIndex]].filter(Boolean) : [];
 
-    if (displayWPs.length === 0) return null;
+    // Fallback search by name if index didn't work and we have a section title
+    if (displayWPs.length === 0 && sectionTitle) {
+        const titleLower = sectionTitle.toLowerCase();
+        const found = workPackages.find(wp =>
+            wp.name.toLowerCase().includes(titleLower) ||
+            titleLower.includes(wp.name.toLowerCase())
+        );
+        if (found) displayWPs = [found];
+    }
+
+    // Default to show nothing if we specifically asked for an index that doesn't exist
+    if (limitToIndex !== undefined && displayWPs.length === 0) {
+        return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">Work Package data not found in structured records.</div>;
+    }
+
+    // If no specific index requested, show all
+    if (limitToIndex === undefined && displayWPs.length === 0) {
+        displayWPs = workPackages;
+    }
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
@@ -1311,8 +1329,8 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                         </div>
 
                                         {/* Work Packages Folder */}
-                                        {proposal.workPackages && proposal.workPackages.length > 0 && (
-                                            <div className="mt-2">
+                                        {(proposal.workPackages && proposal.workPackages.length > 0) && (
+                                            <div className="mt-2 text-primary">
                                                 <div
                                                     className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group"
                                                     onClick={() => {
@@ -1321,24 +1339,38 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                     }}
                                                 >
                                                     <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
-                                                    <Folder className="h-3.5 w-3.5 text-blue-500/80" />
+                                                    <Layers className="h-3.5 w-3.5 text-blue-500/80" />
                                                     <span className="text-muted-foreground font-medium flex-1">Work Packages</span>
                                                     <span className="text-xs text-muted-foreground/60">{proposal.workPackages.length}</span>
                                                 </div>
                                                 <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
-                                                    {proposal.workPackages.map((wp, idx) => (
-                                                        <div
-                                                            key={idx}
-                                                            onClick={() => {
-                                                                setActiveTab('structured');
-                                                                setTimeout(() => document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                            }}
-                                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground group cursor-pointer"
-                                                        >
-                                                            <Layers className="h-3.5 w-3.5 text-blue-500/60" />
-                                                            <span className="text-xs truncate">{wp.name || `WP ${idx + 1}`}</span>
-                                                        </div>
-                                                    ))}
+                                                    {proposal.workPackages.map((wp, idx) => {
+                                                        const wpNumMatch = wp.name.match(/(\d+)/);
+                                                        const targetId = wpNumMatch ? `work_package_${wpNumMatch[1]}` : 'work-packages';
+
+                                                        return (
+                                                            <div
+                                                                key={idx}
+                                                                onClick={() => {
+                                                                    if (activeTab === 'narrative') {
+                                                                        const section = document.getElementById(targetId);
+                                                                        if (section) {
+                                                                            section.scrollIntoView({ behavior: 'smooth' });
+                                                                        } else {
+                                                                            setActiveTab('structured');
+                                                                            setTimeout(() => document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                                                        }
+                                                                    } else {
+                                                                        document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' });
+                                                                    }
+                                                                }}
+                                                                className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground group cursor-pointer"
+                                                            >
+                                                                <div className="h-1 w-1 rounded-full bg-blue-500/40"></div>
+                                                                <span className="text-[10px] truncate">{wp.name || `WP ${idx + 1}`}</span>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
@@ -1490,12 +1522,16 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                             </div>
                                                         )}
                                                         {(() => {
-                                                            const match = section.id.match(/work_package_(\d+)/i) ||
-                                                                section.title.toLowerCase().match(/work package (\d+)/i) ||
-                                                                section.title.match(/W.P.\s*(\d+)/i) ||
-                                                                section.title.match(/WP\s*(\d+)/i);
+                                                            const match = section.id.match(/work_package_?(\d+)/i) ||
+                                                                section.title.match(/work\s*package\D*(\d+)/i) ||
+                                                                section.title.match(/W\.?P\.?\D*(\d+)/i);
                                                             const wpIdx = match ? parseInt(match[1]) - 1 : undefined;
-                                                            return <DynamicWorkPackageSection workPackages={proposal.workPackages} limitToIndex={wpIdx} currency={settings.currency} />;
+                                                            return <DynamicWorkPackageSection
+                                                                workPackages={proposal.workPackages}
+                                                                limitToIndex={wpIdx}
+                                                                currency={settings.currency}
+                                                                sectionTitle={section.title}
+                                                            />;
                                                         })()}
                                                     </div>
                                                 ) : isBudgetSection && proposal.budget && proposal.budget.length > 0 ? (
