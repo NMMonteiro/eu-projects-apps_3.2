@@ -14,12 +14,7 @@ If a specific budget or duration is mentioned above, it is a MANDATORY constrain
 
 CONTEXT SUMMARY: ${summary}
 
-CONSTRAINTS:
-- Partners: ${constraints.partners || 'Not specified'}
-- Budget: ${constraints.budget || 'Not specified'}
-- Duration: ${constraints.duration || 'Not specified'}
-
-TASK: Generate 6-10 high-quality project ideas that DIRECTLY address the user requirements above.
+TASK: Generate 10-12 high-quality project ideas that DIRECTLY address the user requirements above.
 
 Each idea must:
 1. Clearly relate to the user's requirements (e.g., if a specific topic or budget is mentioned, include it)
@@ -47,7 +42,7 @@ CONSTRAINTS:
 - Budget: ${constraints.budget || 'Not specified'}
 - Duration: ${constraints.duration || 'Not specified'}
 
-TASK: Generate 6-10 innovative project ideas based on the context summary.
+TASK: Generate 10-12 innovative project ideas based on the context summary.
 
 Each idea should:
 1. Align with the funding opportunity
@@ -203,9 +198,22 @@ export function buildProposalPrompt(
     ? `\n\n🎯 MANDATORY USER REQUIREMENTS - HIGHEST PRIORITY:\n${userPrompt}\n============================================================`
     : '';
 
-  // Parse target budget from userPrompt if possible (e.g. "€250,000")
-  const extractedBudget = userPrompt?.match(/€\s*(\d{1,3}(?:[.,]\d{3})*)/)?.[1] || constraints.budget?.match(/(\d{1,3}(?:[.,]\d{3})*)/)?.[1] || "250,000";
-  const finalBudgetStr = extractedBudget.includes('€') ? extractedBudget : `€${extractedBudget}`;
+  // Robust budget extraction: look for numbers like 250,000 or 250k or €250k
+  const extractNumericBudget = (text: string): string | null => {
+    if (!text) return null;
+    // Look for patterns like €250,000, 250,000 EUR, or just "budget of 250000"
+    const regex = /(?:€|EUR|budget of|total of|amount of)?\s*(\d{1,3}(?:[.,]\d{3})*(?:\s*k)?)/i;
+    const match = text.match(regex);
+    if (match) {
+      let val = match[1].toLowerCase().replace(/[.,\s]/g, '');
+      if (val.endsWith('k')) val = (parseInt(val) * 1000).toString();
+      return val;
+    }
+    return null;
+  };
+
+  const extractedBudget = extractNumericBudget(userPrompt || '') || extractNumericBudget(constraints.budget || '') || "250000";
+  const finalBudgetStr = `€${parseInt(extractedBudget).toLocaleString()}`;
 
   return `You are an expert EU funding proposal writer.
 

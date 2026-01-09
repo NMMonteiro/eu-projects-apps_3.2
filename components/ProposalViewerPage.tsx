@@ -5,7 +5,7 @@ import {
     FileText, CheckCircle2, ChevronDown, Sparkles,
     Terminal, Settings, Layout, Search, Filter,
     Plus, Trash2, Edit, Save as SaveIcon, X,
-    Folder, File, ChevronRight
+    Folder, File, ChevronRight, RefreshCw, Wand2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,6 +14,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter
+} from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { serverUrl, publicAnonKey } from '../utils/supabase/info';
 
@@ -29,8 +37,19 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [expandedWp, setExpandedWp] = useState<number | null>(0);
     const [fundingScheme, setFundingScheme] = useState<any>(null);
 
+    // Consortium Management State
+    const [allPartners, setAllPartners] = useState<any[]>([]);
+    const [showConsortiumDialog, setShowConsortiumDialog] = useState(false);
+    const [selectedPartnerIds, setSelectedPartnerIds] = useState<Set<string>>(new Set());
+    const [coordinatorId, setCoordinatorId] = useState<string | null>(null);
+    const [savingConsortium, setSavingConsortium] = useState(false);
+
+    // AI Generation State
+    const [generatingSection, setGeneratingSection] = useState<string | null>(null);
+
     useEffect(() => {
         loadProposal();
+        loadAllPartners();
     }, [proposalId]);
 
     const loadProposal = async () => {
@@ -42,6 +61,14 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             if (!response.ok) throw new Error('Failed to load proposal');
             const data = await response.json();
             setProposal(data);
+
+            // Set consortium state
+            if (data.partners) {
+                const ids = new Set(data.partners.map((p: any) => p.id));
+                setSelectedPartnerIds(ids);
+                const lead = data.partners.find((p: any) => p.isCoordinator);
+                if (lead) setCoordinatorId(lead.id);
+            }
 
             // If proposal has a funding scheme, fetch it
             if (data.funding_scheme_id || data.fundingSchemeId) {
@@ -59,6 +86,92 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             toast.error('Failed to load proposal details');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadAllPartners = async () => {
+        try {
+            const response = await fetch(`${serverUrl}/partners`, {
+                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setAllPartners(data);
+            }
+        } catch (error) {
+            console.error('Failed to load partners:', error);
+        }
+    };
+
+    const handleUpdateProposal = async (updates: any) => {
+        try {
+            const response = await fetch(`${serverUrl}/proposals/${proposalId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${publicAnonKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updates)
+            });
+            if (!response.ok) throw new Error('Update failed');
+            const updated = await response.json();
+            setProposal(updated);
+            return updated;
+        } catch (error) {
+            console.error('Update error:', error);
+            toast.error('Failed to save changes');
+        }
+    };
+
+    const handleSaveConsortium = async () => {
+        setSavingConsortium(true);
+        try {
+            // Map selected partners with their data from the database
+            const newPartners = allPartners
+                .filter(p => selectedPartnerIds.has(p.id))
+                .map(p => ({
+                    ...p,
+                    isCoordinator: p.id === coordinatorId,
+                    role: p.id === coordinatorId ? 'Project Coordinator' : 'Technical Partner'
+                }))
+                .sort((a, b) => (a.isCoordinator ? -1 : b.isCoordinator ? 1 : 0));
+
+            await handleUpdateProposal({ partners: newPartners });
+            setShowConsortiumDialog(false);
+            toast.success('Consortium updated successfully');
+        } catch (error) {
+            toast.error('Failed to update consortium');
+        } finally {
+            setSavingConsortium(false);
+        }
+    };
+
+    const generateSection = async (sectionKey: string, sectionTitle: string) => {
+        setGeneratingSection(sectionKey);
+        try {
+            const response = await fetch(`${serverUrl}/generate-section`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${publicAnonKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sectionTitle,
+                    proposalContext: `Project Title: ${proposal.title}\nDescription: ${proposal.summary}`,
+                    existingSections: Object.keys(dynamicSections)
+                })
+            });
+            if (!response.ok) throw new Error('Generation failed');
+            const data = await response.json();
+
+            const newDynamicSections = { ...dynamicSections, [sectionKey]: data.content };
+            await handleUpdateProposal({ dynamic_sections: newDynamicSections });
+            toast.success(`Generated content for ${sectionTitle}`);
+        } catch (error) {
+            console.error('AI error:', error);
+            toast.error(`Failed to generate ${sectionTitle}`);
+        } finally {
+            setGeneratingSection(null);
         }
     };
 
@@ -248,6 +361,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         </div>
                     </div>
 
+                    {/* Financial Section */}
                     <div className="space-y-6">
                         <div className="flex items-center justify-between">
                             <h3 className="text-2xl font-bold flex items-center gap-2">
@@ -295,11 +409,23 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         </Card>
                     </div>
 
+                    {/* Consortium Section */}
                     <div className="space-y-6">
-                        <h3 className="text-2xl font-bold flex items-center gap-2">
-                            <Users className="h-6 w-6 text-indigo-500" />
-                            Consortium Members
-                        </h3>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-2xl font-bold flex items-center gap-2">
+                                <Users className="h-6 w-6 text-indigo-500" />
+                                Consortium Members
+                            </h3>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+                                onClick={() => setShowConsortiumDialog(true)}
+                            >
+                                <Edit className="h-4 w-4 mr-2" />
+                                Manage Consortium
+                            </Button>
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {(proposal.partners || []).map((partner: any, pIdx: number) => (
                                 <Card key={pIdx} className="bg-secondary/10 border-white/5 rounded-3xl p-6 hover:bg-secondary/20 transition-all border-l-4 border-l-indigo-500/50 shadow-xl">
@@ -380,20 +506,50 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                 <section key={sec.key} id={sec.key} className={`space-y-8 scroll-mt-24 relative ${sec.level > 0 ? 'ml-8' : ''}`}>
                                     <div className="absolute -left-4 top-0 bottom-0 w-px bg-white/5"></div>
                                     <div className={`space-y-3 ${sec.level === 0 ? 'border-l-4 border-indigo-500/50 pl-6' : 'border-l-2 border-white/10 pl-4'}`}>
-                                        <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">
-                                            {sec.level === 0 ? `Section 0${idx + 1}` : `Sub-section ${idx + 1}`}
-                                        </p>
-                                        <h2 className={`${sec.level === 0 ? 'text-4xl' : 'text-2xl'} font-extrabold italic tracking-tight capitalize`}>
-                                            {sec.label}
-                                        </h2>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">
+                                                    {sec.level === 0 ? `Section 0${idx + 1}` : `Sub-section ${idx + 1}`}
+                                                </p>
+                                                <h2 className={`${sec.level === 0 ? 'text-4xl' : 'text-2xl'} font-extrabold italic tracking-tight capitalize`}>
+                                                    {sec.label}
+                                                </h2>
+                                            </div>
+                                            {!dynamicSections?.[sec.key] && (
+                                                <Button
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
+                                                    onClick={() => generateSection(sec.key, sec.label)}
+                                                    disabled={generatingSection === sec.key}
+                                                >
+                                                    {generatingSection === sec.key ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wand2 className="h-4 w-4 mr-2" />}
+                                                    Generate Section
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className={`prose prose-invert max-w-none text-muted-foreground leading-relaxed selection:bg-white/10 ${sec.level === 0 ? 'text-md font-medium' : 'text-sm'}`}>
                                         {dynamicSections?.[sec.key] ? (
                                             <div dangerouslySetInnerHTML={{ __html: dynamicSections[sec.key] }} />
                                         ) : (
-                                            <div className="bg-amber-500/5 border border-amber-500/10 p-6 rounded-3xl text-amber-500/50 italic flex items-center gap-3">
-                                                <AlertTriangle className="h-5 w-5" />
-                                                This section was not included in the AI generation. Ensure the funding scheme matches the generation requirements.
+                                            <div className="bg-amber-500/5 border border-amber-500/10 p-12 rounded-3xl text-center space-y-4">
+                                                <div className="mx-auto h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
+                                                    <AlertTriangle className="h-6 w-6 text-amber-500" />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="text-amber-500/80 font-bold">Incomplete Proposal Section</p>
+                                                    <p className="text-xs text-muted-foreground">This section was either not generated yet or is missing from the current draft.</p>
+                                                </div>
+                                                <Button
+                                                    variant="outline"
+                                                    className="border-primary/50 text-primary hover:bg-primary/10"
+                                                    onClick={() => generateSection(sec.key, sec.label)}
+                                                    disabled={generatingSection === sec.key}
+                                                >
+                                                    {generatingSection === sec.key ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                                                    AI Generation
+                                                </Button>
                                             </div>
                                         )}
                                     </div>
@@ -426,6 +582,100 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Consortium Management Dialog */}
+            <Dialog open={showConsortiumDialog} onOpenChange={setShowConsortiumDialog}>
+                <DialogContent className="max-w-4xl bg-secondary border-white/10 text-white rounded-3xl overflow-hidden p-0">
+                    <div className="p-8 space-y-6">
+                        <DialogHeader>
+                            <DialogTitle className="text-3xl font-black italic">Consortium Management</DialogTitle>
+                            <DialogDescription className="text-muted-foreground">
+                                Add or remove organizations from this proposal. Assign the Lead Coordinator role.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[50vh]">
+                            <div className="space-y-4 flex flex-col">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                    <Users className="h-4 w-4" /> Available Partners
+                                </h4>
+                                <ScrollArea className="flex-1 bg-black/20 rounded-2xl border border-white/5 p-4">
+                                    <div className="space-y-2">
+                                        {allPartners.map(p => (
+                                            <div
+                                                key={p.id}
+                                                className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${selectedPartnerIds.has(p.id) ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                                                onClick={() => {
+                                                    const next = new Set(selectedPartnerIds);
+                                                    if (next.has(p.id)) {
+                                                        next.delete(p.id);
+                                                        if (coordinatorId === p.id) setCoordinatorId(null);
+                                                    } else {
+                                                        next.add(p.id);
+                                                        if (!coordinatorId) setCoordinatorId(p.id);
+                                                    }
+                                                    setSelectedPartnerIds(next);
+                                                }}
+                                            >
+                                                <div>
+                                                    <p className="font-bold text-sm">{p.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground truncate max-w-[150px]">{p.country || 'Unknown Country'}</p>
+                                                </div>
+                                                {selectedPartnerIds.has(p.id) && <CheckCircle2 className="h-4 w-4 text-indigo-400" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </ScrollArea>
+                            </div>
+
+                            <div className="space-y-4 flex flex-col">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                                    <Layers className="h-4 w-4" /> Selected Consortium
+                                </h4>
+                                <ScrollArea className="flex-1 bg-indigo-500/5 rounded-2xl border border-indigo-500/20 p-4">
+                                    <div className="space-y-3">
+                                        {allPartners.filter(p => selectedPartnerIds.has(p.id)).map(p => (
+                                            <div key={p.id} className="p-3 bg-black/20 rounded-xl border border-white/10 space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="font-bold text-sm text-white/90">{p.name}</span>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className={`h-7 px-2 text-[10px] font-black uppercase tracking-tighter italic ${coordinatorId === p.id ? 'bg-yellow-500/10 text-yellow-500' : 'text-muted-foreground hover:text-white'}`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setCoordinatorId(p.id);
+                                                        }}
+                                                    >
+                                                        {coordinatorId === p.id ? 'Coordinator' : 'Set Coordinator'}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {selectedPartnerIds.size === 0 && (
+                                            <div className="h-full flex flex-col items-center justify-center text-muted-foreground italic py-12 text-sm">
+                                                No partners selected.
+                                            </div>
+                                        )}
+                                    </div>
+                                </ScrollArea>
+                            </div>
+                        </div>
+
+                        <DialogFooter className="pt-6 border-t border-white/5">
+                            <Button variant="ghost" onClick={() => setShowConsortiumDialog(false)}>Cancel</Button>
+                            <Button
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 rounded-xl font-bold"
+                                onClick={handleSaveConsortium}
+                                disabled={savingConsortium || selectedPartnerIds.size === 0 || !coordinatorId}
+                            >
+                                {savingConsortium && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                Update Consortium & Recalculate
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

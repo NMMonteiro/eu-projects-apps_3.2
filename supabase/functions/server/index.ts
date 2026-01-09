@@ -161,18 +161,18 @@ URL: ${targetUrl}
 CONTENT: ${content.substring(0, 5000)}
 
 Extract:
-1. A summary of the funding opportunity (incorporating user instructions if provided)
-2. Partner requirements
-3. Budget range (If a specific total budget like "€250,000" is mentioned in user text or URL, use that EXACT value)
-4. Project duration (If a specific duration like "24 months" or dates like "2026-2028" are mentioned, use that EXACT duration)
+1. A summary of the funding opportunity (incorporating user instructions if provided).
+2. Partner requirements.
+3. Budget range (CRITICAL: If a specific total budget like "250,000" or "€1M" is mentioned in user text or URL, use that EXACT numeric value).
+4. Project duration (If a specific duration like "24 months" is mentioned, use that EXACT duration).
 
 Return JSON:
 {
   "summary": "Summary of the opportunity",
   "constraints": {
-    "partners": "e.g., 3-5 partners required (Check user provided text first)",
-    "budget": "e.g., €250,000 (MANDATORY: If user text mentions a budget, use that EXACT value above everything else)",
-    "duration": "e.g., 24 months (MANDATORY: If user text mentions a duration, use that EXACT value)"
+    "partners": "e.g., 3-5 partners required",
+    "budget": "e.g., 250000 (MANDATORY: Numeric value only if possible, prioritize user instructions over URL)",
+    "duration": "e.g., 24 months"
   }
 }
 
