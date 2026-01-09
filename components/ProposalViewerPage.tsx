@@ -1105,7 +1105,9 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 const isWP = lowerKey.includes('work_package') || lowerLabel.includes('work package');
 
                 if (isWP) {
-                    const match = lowerKey.match(/work_package_(\d+)/i) || lowerLabel.match(/work package (\d+)/i);
+                    const match = lowerKey.match(/work_package_?(\d+)/i) ||
+                        lowerLabel.match(/work\s*package\D*(\d+)/i) ||
+                        lowerLabel.match(/w\.?p\.?\D*(\d+)/i);
                     if (match) {
                         renderedWPIndices.add(parseInt(match[1]) - 1);
                     }

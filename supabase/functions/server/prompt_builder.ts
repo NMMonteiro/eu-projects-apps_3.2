@@ -175,6 +175,20 @@ export function buildProposalPrompt(
     ? flattenSections(fundingScheme.template_json.sections)
     : [];
 
+  // FORCE: If this is an Erasmus-style project or missing WPs, ensure we have slots for 4 WPs
+  const hasMultipleWPs = allSections.some(s => s.key.includes('work_package_2'));
+  if (!hasMultipleWPs && fundingScheme) {
+    // Check if we should add them (heuristic: if WP1 exists but WP2 doesn't)
+    const wp1Idx = allSections.findIndex(s => s.key.includes('work_package_1'));
+    if (wp1Idx !== -1) {
+      allSections.splice(wp1Idx + 1, 0,
+        { key: 'work_package_2', label: 'Work package n°2 - Platform Development', description: 'Technical design and development of the core solution.' },
+        { key: 'work_package_3', label: 'Work package n°3 - Implementation & Testing', description: 'Piloting and real-world testing with target groups.' },
+        { key: 'work_package_4', label: 'Work package n°4 - Dissemination & Sustainability', description: 'Impact assessment and long-term sharing of results.' }
+      );
+    }
+  }
+
   const partnerInfo = partners.length > 0
     ? `\n\nCONSORTIUM PARTNERS:\n${partners.map(p => `- ${p.name}${p.acronym ? ` (${p.acronym})` : ''} - ${p.country || 'Country not specified'}${p.isCoordinator ? ' [LEAD COORDINATOR]' : ''}\n  - Profile: ${p.description || 'No description'}\n  - Expertise: ${p.experience || ''}\n  - Past Projects: ${p.relevantProjects || ''}`).join('\n')}`
     : '';
@@ -234,7 +248,7 @@ STRICT ADHERENCE RULES:
 - DETAILED BREAKDOWN: Every main budget item MUST have specific sub-items in the "breakdown" array. Keep sub-items to max 5 per category to avoid output truncation.
 - CATEGORIES TO INCLUDE: Hardware, Software Licences/Subscriptions (AI apps, etc.), Domains/Hosting, Travel & Subsistence, Dissemination Costs, and Staff/Expert Rates.
 - Each narrative section MUST be well-structured and technical (approx 2-3 paragraphs each). DO NOT be overly brief, but prioritize depth over sheer word count.
-- **EXACTLY 4 WORK PACKAGES**: You MUST generate exactly 4 unique Work Packages (WP1, WP2, WP3, WP4) in the "workPackages" array, even if the template doesn't explicitly list all of them. Each WP must have its own unique name, technical description, detailed activities (with lead partner and budget), and deliverables.
+- **MANDATORY EXACTLY 4 WORK PACKAGES**: You MUST generate exactly 4 unique Work Packages (WP1, WP2, WP3, WP4) in the "workPackages" array AND in the "dynamicSections" object (using the keys work_package_1, work_package_2, work_package_3, work_package_4). Each WP must have its own unique name, technical description, detailed activities (with lead partner and budget), and deliverables.
 - TOKEN SAFETY: If the proposal is exceptionally long, prioritize quality over extreme length to ensure the JSON structure is completed before reaching token limits.
 
 
@@ -255,14 +269,14 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
   "workPackages": [
     {
       "name": "WP1: Project Management",
-      "description": "Detailed description...",
+      "description": "...",
       "duration": "M1-M24",
-      "activities": [{ "name": "...", "description": "...", "leadPartner": "...", "participatingPartners": ["..."], "estimatedBudget": 5000 }],
-      "deliverables": ["..."]
+      "activities": [{ "name": "Kick-off", "description": "...", "leadPartner": "...", "participatingPartners": ["..."], "estimatedBudget": 5000 }],
+      "deliverables": ["Grant Agreement"]
     },
-    { "name": "WP2: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
-    { "name": "WP3: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
-    { "name": "WP4: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] }
+    { "name": "WP2: Platform Development", "description": "...", "duration": "M3-M18", "activities": [...], "deliverables": [...] },
+    { "name": "WP3: Implementation & Piloting", "description": "...", "duration": "M12-M24", "activities": [...], "deliverables": [...] },
+    { "name": "WP4: Dissemination", "description": "...", "duration": "M1-M24", "activities": [...], "deliverables": [...] }
   ],
   "risks": [
     {
