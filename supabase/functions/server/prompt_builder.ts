@@ -183,22 +183,40 @@ export function buildProposalPrompt(
     ? `\n\n🎯 MANDATORY USER REQUIREMENTS - HIGHEST PRIORITY:\n${userPrompt}\n============================================================`
     : '';
 
-  // Robust budget extraction: look for numbers like 250,000 or 250k or €250k
-  const extractNumericBudget = (text: string): string | null => {
+  // Robust budget extraction: handle dot as thousands separator (250.000) or comma (250,000)
+  const extractNumericBudget = (text: string): number | null => {
     if (!text) return null;
-    // Look for patterns like €250,000, 250,000 EUR, or just "budget of 250000"
-    const regex = /(?:€|EUR|budget of|total of|amount of)?\s*(\d{1,3}(?:[.,]\d{3})*(?:\s*k)?)/i;
-    const match = text.match(regex);
+    const cleanText = text.replace(/&nbsp;/g, ' ').replace(/\s/g, '');
+    const match = cleanText.match(/(?:€|EUR|budgetof|totalof|amountof)?(\d{1,3}(?:[.,]\d{3})*(?:\s*k)?)/i);
     if (match) {
-      let val = match[1].toLowerCase().replace(/[.,\s]/g, '');
-      if (val.endsWith('k')) val = (parseInt(val) * 1000).toString();
-      return val;
+      let val = match[1].toLowerCase();
+      if (val.endsWith('k')) {
+        return parseInt(val.replace('k', '')) * 1000;
+      }
+      // If there are multiple dots/commas, it's definitely thousands separators
+      // If there is one dot/comma, we assume it's thousands if there are 3 digits after it
+      if (val.includes('.') && val.includes(',')) {
+        // Complex European format: 250.000,00
+        val = val.split(',')[0].replace(/\./g, '');
+      } else if (val.includes('.')) {
+        const parts = val.split('.');
+        if (parts[parts.length - 1].length === 3) val = val.replace(/\./g, '');
+        else val = parts[0]; // Assume decimal
+      } else if (val.includes(',')) {
+        const parts = val.split(',');
+        if (parts[parts.length - 1].length === 3) val = val.replace(/,/g, '');
+        else val = parts[0]; // Assume decimal
+      }
+      return parseInt(val) || null;
     }
     return null;
   };
 
-  const extractedBudget = extractNumericBudget(userPrompt || '') || extractNumericBudget(constraints.budget || '') || "250000";
-  const finalBudgetStr = `€${parseInt(extractedBudget).toLocaleString()}`;
+  const budgetNum = extractNumericBudget(userPrompt || '') || extractNumericBudget(constraints.budget || '') || 250000;
+  const finalBudgetStr = `€${budgetNum.toLocaleString()}`;
+  const personnelBudget = Math.floor(budgetNum * 0.6);
+  const operationalBudget = Math.floor(budgetNum * 0.3);
+  const miscBudget = budgetNum - personnelBudget - operationalBudget;
 
   return `You are an expert EU funding proposal writer.
 
@@ -217,7 +235,7 @@ ${userRequirements}
 STRICT OUTPUT RULES:
 1. **PARTNERS ARRAY**: The "partners" array in JSON MUST contain EXACTLY ${partners.length} elements.
 2. **COORDINATOR**: The first partner (${partners[0]?.name}) IS THE COORDINATOR.
-3. **BUDGET ITEMS**: The sum of all "cost" values in the "budget" array MUST EQUAL EXACTLY ${extractedBudget.replace(/[.,]/g, '')}.
+3. **BUDGET ITEMS**: The sum of all "cost" values in the "budget" array MUST EQUAL EXACTLY ${budgetNum}.
 4. **CONSISTENCY**: For EVERY entry in the "workPackages" array, there MUST be a corresponding narrative section in "dynamicSections" (using keys like work_package_1, work_package_2, etc.).
 5. **TECHNICAL DEPTH**: Each Work Package description MUST be technical and specific to the project idea.
 
@@ -230,23 +248,40 @@ OUTPUT FORMAT (JSON ONLY):
   "workPackages": [
     {
       "name": "WP1: Project Management & Coordination",
-      "description": "Led by ${partners[0]?.name}...",
+      "description": "Comprehensive management led by ${partners[0]?.name}. Includes administrative, financial, and technical orchestration.",
       "duration": "M1-M24",
-      "activities": [{ "name": "Coordination", "description": "...", "leadPartner": "${partners[0]?.name}", "participatingPartners": [${partners.slice(1).map(p => `"${p.name}"`).join(', ')}], "estimatedBudget": 20000 }],
-      "deliverables": ["Management Plan"]
+      "activities": [
+        { "name": "Project Coordination", "description": "Weekly technical meetings and resource management.", "leadPartner": "${partners[0]?.name}", "participatingPartners": [${partners.slice(1).map(p => `"${p.name}"`).join(', ')}], "estimatedBudget": ${Math.floor(personnelBudget * 0.2)} },
+        { "name": "Quality Assurance", "description": "Monitoring deliverables and risk assessment.", "leadPartner": "${partners[0]?.name}", "participatingPartners": [], "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
+      ],
+      "deliverables": ["Project Management Plan", "Progress Reports", "Quality Handbook"]
     }
-    // Generate all other WPs here based on the project scope
+    // YOU MUST CONTINUE GENERATING ALL NECESSARY WPs (WP2, WP3, WP4...)
+    // EVERY WP MUST HAVE AT LEAST 2-3 DETAILED ACTIVITIES.
   ],
   "budget": [
     {
       "item": "Personnel Costs",
-      "cost": ${Math.floor(parseInt(extractedBudget.replace(/[.,]/g, '')) * 0.6)},
-      "description": "Staff allocation for all partners.",
-      "breakdown": [],
-      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor((parseInt(extractedBudget.replace(/[.,]/g, '')) * 0.6) / partners.length)} }`).join(', ')}]
+      "cost": ${personnelBudget},
+      "description": "Salaries for staff across all partners for technical development and management.",
+      "breakdown": [
+        { "subItem": "Senior Developers", "quantity": "12 months", "cost": ${Math.floor(personnelBudget * 0.5)} },
+        { "subItem": "Project Managers", "quantity": "24 months", "cost": ${Math.floor(personnelBudget * 0.3)} },
+        { "subItem": "Administrative Support", "quantity": "24 months", "cost": ${Math.floor(personnelBudget * 0.2)} }
+      ],
+      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
     },
-    { "item": "Operational Expenses", "cost": ${Math.floor(parseInt(extractedBudget.replace(/[.,]/g, '')) * 0.3)}, "description": "Travel, equipment, etc.", "breakdown": [], "partnerAllocations": [] },
-    { "item": "Miscellaneous / Contingency", "cost": ${Math.floor(parseInt(extractedBudget.replace(/[.,]/g, '')) * 0.1)}, "description": "Adjustment to reach target.", "breakdown": [], "partnerAllocations": [] }
+    { 
+      "item": "Operational Expenses", 
+      "cost": ${operationalBudget}, 
+      "description": "Travel to partner meetings, equipment for pilot testing, and software licenses.", 
+      "breakdown": [
+        { "subItem": "Travel & Subsistence", "quantity": "10 trips", "cost": ${Math.floor(operationalBudget * 0.4)} },
+        { "subItem": "Equipment & Licenses", "quantity": "Varies", "cost": ${Math.floor(operationalBudget * 0.6)} }
+      ], 
+      "partnerAllocations": [] 
+    },
+    { "item": "Miscellaneous / Contingency", "cost": ${miscBudget}, "description": "Contingency fund to ensure total budget matches requirement exactly.", "breakdown": [], "partnerAllocations": [] }
   ],
   "risks": [{ "risk": "Technical delay", "likelihood": "Low", "impact": "High", "mitigation": "..." }],
   "summary": "<p>Project summary...</p>",

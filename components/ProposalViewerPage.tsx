@@ -5,7 +5,7 @@ import {
     FileText, CheckCircle2, ChevronDown, Sparkles,
     Terminal, Settings, Layout, Search, Filter,
     Plus, Trash2, Edit, Save as SaveIcon, X,
-    Folder, File, ChevronRight, RefreshCw, Wand2
+    Folder, File, ChevronRight, RefreshCw, Wand2, Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -221,10 +221,19 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
 
     // Create a set of keys already in the template to avoid duplicates
     const templateKeys = new Set((templateSections || []).map(s => s.key));
+    const templateWPKeys = new Set(templateSections
+        .filter(s => s.label?.toLowerCase().includes('work package') || s.key.includes('wp'))
+        .map(s => s.key));
 
     // Find extra sections in dynamicSections that are NOT in the template
-    const extraSections = Object.keys(dynamicSections)
-        .filter(key => !templateKeys.has(key))
+    // AND are not redundant work package sections
+    const extraSections = Object.keys(dynamicSections || {})
+        .filter(key => {
+            if (templateKeys.has(key)) return false;
+            // Prevent duplication of Work Packages if template already has them
+            if (key.startsWith('work_package_') && templateWPKeys.size > 0) return false;
+            return true;
+        })
         .map(key => ({
             key,
             label: key.replace(/_/g, ' ').replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()),
@@ -478,8 +487,10 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         <div className="md:col-span-1 space-y-4">
                             <Card className="bg-secondary/10 border-white/5 rounded-3xl p-6 sticky top-24 backdrop-blur-xl shadow-2xl">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-primary/50">Structural Layout</h4>
-                                    <Badge variant="outline" className="text-[8px] opacity-40">AI GEN v2.0</Badge>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-[#4472C4]">Document Structure</h4>
+                                    <Button size="icon" variant="ghost" className="h-6 w-6 rounded-full bg-white/5 hover:bg-white/10">
+                                        <Plus className="h-3 w-3 text-white/40" />
+                                    </Button>
                                 </div>
                                 <ScrollArea className="h-[65vh] -mx-2 px-2">
                                     <div className="space-y-1">
@@ -508,6 +519,46 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                         ))}
                                     </div>
                                 </ScrollArea>
+
+                                {/* Sidebar Data Tabs - Matching user screenshot */}
+                                <div className="pt-6 border-t border-white/5 space-y-4">
+                                    <div className="space-y-1">
+                                        <button onClick={() => setActiveTab('structured')} className="w-full flex items-center justify-between px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all group">
+                                            <div className="flex items-center gap-3">
+                                                <Folder className="h-4 w-4 text-[#4472C4]" />
+                                                <span className="font-bold">Work Packages</span>
+                                            </div>
+                                            <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full group-hover:bg-primary/20 transition-colors">{workPackagesArray.length}</span>
+                                        </button>
+
+                                        <div className="ml-4 space-y-1 mt-1">
+                                            {workPackagesArray.slice(0, 4).map((wp: any, i: number) => (
+                                                <button key={i} onClick={() => { setActiveTab('structured'); setExpandedWp(i); }} className="w-full text-left px-3 py-1.5 text-[11px] text-muted-foreground hover:text-white truncate transition-colors flex items-center gap-2">
+                                                    <Layers className="h-3 w-3 opacity-20" />
+                                                    {wp.name || `WP${i + 1}`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <button onClick={() => setActiveTab('structured')} className="w-full flex items-center justify-between px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all group">
+                                            <div className="flex items-center gap-3">
+                                                <Folder className="h-4 w-4 text-green-500/50" />
+                                                <span className="font-bold">Consortium</span>
+                                            </div>
+                                            <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full">{partnersArray.length}</span>
+                                        </button>
+                                        <button onClick={() => setActiveTab('structured')} className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+                                            <DollarSign className="h-4 w-4 text-emerald-500/50" />
+                                            <span className="font-bold">Budget</span>
+                                        </button>
+                                        <button className="w-full flex items-center gap-3 px-3 py-2 text-sm text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all opacity-50">
+                                            <Shield className="h-4 w-4 text-amber-500/50" />
+                                            <span className="font-bold">Risk Management</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </Card>
                         </div>
 
