@@ -96,7 +96,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             });
             if (response.ok) {
                 const data = await response.json();
-                setAllPartners(data);
+                setAllPartners(Array.isArray(data) ? data : (data.partners || []));
             }
         } catch (error) {
             console.error('Failed to load partners:', error);
@@ -214,7 +214,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         : [];
 
     // Create a set of keys already in the template to avoid duplicates
-    const templateKeys = new Set(templateSections.map(s => s.key));
+    const templateKeys = new Set((templateSections || []).map(s => s.key));
 
     // Find extra sections in dynamicSections that are NOT in the template
     const extraSections = Object.keys(dynamicSections)
