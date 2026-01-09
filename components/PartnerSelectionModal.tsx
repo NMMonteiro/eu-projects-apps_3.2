@@ -111,8 +111,8 @@ export function PartnerSelectionModal({ isOpen, onClose, onConfirm, selectedIdea
             if (coordinatorId === id) setCoordinatorId(null);
         } else {
             newSelected.add(id);
-            // If no coordinator yet, maybe auto-assign first one?
-            // if (!coordinatorId) setCoordinatorId(id);
+            // If no coordinator yet, auto-assign first one
+            if (!coordinatorId) setCoordinatorId(id);
         }
         setSelectedIds(newSelected);
     };

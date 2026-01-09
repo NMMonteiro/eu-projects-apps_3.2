@@ -137,30 +137,78 @@ const DynamicWorkPackageSection = ({ workPackages, limitToIndex }: { workPackage
             {displayWPs.map((wp, i) => {
                 const actualIndex = limitToIndex !== undefined ? limitToIndex : i;
                 return (
-                    <Card key={actualIndex} className="bg-card/30 border-border/40">
-                        <CardHeader className="pb-2">
+                    <Card key={actualIndex} className="bg-card/30 border-border/40 overflow-hidden">
+                        <CardHeader className="pb-3 bg-secondary/10">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <Badge variant="outline" className="mb-2 border-primary/30 text-primary">WP {actualIndex + 1}</Badge>
-                                    <CardTitle className="text-lg">{wp.name}</CardTitle>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5 uppercase text-[10px] px-2 py-0">Work Package {actualIndex + 1}</Badge>
+                                        {wp.duration && <span className="text-[10px] text-muted-foreground font-mono">{wp.duration}</span>}
+                                    </div>
+                                    <CardTitle className="text-xl font-bold tracking-tight">{wp.name}</CardTitle>
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: wp.description }} />
-                            {wp.deliverables && wp.deliverables.length > 0 && (
-                                <div className="bg-secondary/30 rounded-lg p-4">
-                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-2">Deliverables</h5>
-                                    <ul className="space-y-1.5">
-                                        {wp.deliverables.map((del: string, dIdx: number) => (
-                                            <li key={dIdx} className="flex items-start gap-2 text-sm">
-                                                <CheckCircle2 className="h-4 w-4 text-green-500/60 mt-0.5 shrink-0" />
-                                                <span className="text-muted-foreground/90">{del}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
+                        <CardContent className="space-y-6 pt-6">
+                            {/* Description */}
+                            <div className="space-y-2">
+                                <h5 className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/70">Objectives & Description</h5>
+                                <div className="prose prose-invert prose-sm max-w-none text-muted-foreground/90 leading-relaxed"
+                                    dangerouslySetInnerHTML={{ __html: wp.description }} />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Activities */}
+                                {wp.activities && wp.activities.length > 0 && (
+                                    <div className="bg-blue-500/5 rounded-xl p-5 border border-blue-500/10 h-full">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-1.5 rounded-md bg-blue-500/20">
+                                                <Layers className="h-3.5 w-3.5 text-blue-400" />
+                                            </div>
+                                            <h5 className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">Planned Activities</h5>
+                                        </div>
+                                        <ul className="space-y-3">
+                                            {wp.activities.map((act: any, aIdx: number) => {
+                                                const activityName = typeof act === 'string' ? act : act.name || act.activity;
+                                                const activityDesc = typeof act === 'object' ? act.description : null;
+                                                return (
+                                                    <li key={aIdx} className="group">
+                                                        <div className="flex items-start gap-3">
+                                                            <div className="h-5 w-5 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-blue-500/20 transition-colors">
+                                                                <span className="text-[9px] font-bold text-blue-400">{aIdx + 1}</span>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <span className="text-sm font-medium text-foreground/90 block">{activityName}</span>
+                                                                {activityDesc && <p className="text-xs text-muted-foreground/70 leading-relaxed">{activityDesc}</p>}
+                                                            </div>
+                                                        </div>
+                                                    </li>
+                                                );
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* Deliverables */}
+                                {wp.deliverables && wp.deliverables.length > 0 && (
+                                    <div className="bg-green-500/5 rounded-xl p-5 border border-green-500/10 h-full">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <div className="p-1.5 rounded-md bg-green-500/20">
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                                            </div>
+                                            <h5 className="text-[10px] font-bold uppercase tracking-[0.2em] text-green-400">Key Deliverables</h5>
+                                        </div>
+                                        <ul className="space-y-3">
+                                            {wp.deliverables.map((del: string, dIdx: number) => (
+                                                <li key={dIdx} className="flex items-start gap-3">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-green-500/40 mt-1.5 shrink-0" />
+                                                    <span className="text-sm text-muted-foreground/90">{del}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
                 );
@@ -412,12 +460,17 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             if (data.partners && data.partners.length > 0) {
                 try {
                     const partnerIds = data.partners.map((p: any) => p.id).filter(Boolean);
-                    if (partnerIds.length > 0) {
-                        console.log("Hydrating partners with IDs:", partnerIds);
+
+                    // Filter out legacy or non-UUID IDs to prevent Supabase query errors (type uuid)
+                    const validUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    const uuidIds = partnerIds.filter((id: string) => validUuidPattern.test(id));
+
+                    if (uuidIds.length > 0) {
+                        console.log("Hydrating partners with DB IDs:", uuidIds);
                         const { data: dbPartners, error: partnersError } = await supabase
                             .from('partners')
                             .select('*')
-                            .in('id', partnerIds);
+                            .in('id', uuidIds);
 
                         if (partnersError) {
                             console.error('Partner hydration query failed:', partnersError);
@@ -1165,7 +1218,13 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                             <div className="h-3.5 w-3.5 flex items-center justify-center">
                                                                 <div className={`h-1.5 w-1.5 rounded-full ${section.level > 1 ? 'bg-primary/20' : 'bg-primary/50'} group-hover:bg-primary`}></div>
                                                             </div>
-                                                            <span className={`truncate ${section.level === 1 ? 'font-medium' : 'text-xs'}`}>{section.title}</span>
+                                                            <span className={`truncate ${section.level === 1 ? 'font-medium' : 'text-xs'}`}>
+                                                                {section.title
+                                                                    .replace(/^undefined\s*/gi, '')
+                                                                    .replace(/\s*-\s*null\b/gi, '')
+                                                                    .replace(/_/g, ' ')
+                                                                    .replace(/\b\w/g, l => l.toUpperCase())}
+                                                            </span>
                                                         </a>
                                                     )
                                                 ))}
@@ -1272,16 +1331,27 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                             {sections.map((section) => {
                                 if (!section.content) return null;
 
+                                const isApplicantSection =
+                                    section.title.toLowerCase().includes('applicant organisation') ||
+                                    section.id === 'applicant_organisation' ||
+                                    section.id === 'coordinator_organisation' ||
+                                    section.id === 'applicant';
+
                                 const isPartnerSection =
-                                    section.title.toLowerCase().includes('partner organisation') ||
-                                    section.title.toLowerCase().includes('participating organisation') ||
+                                    (section.title.toLowerCase().includes('partner organisation') ||
+                                        section.title.toLowerCase().includes('participating organisation') ||
+                                        section.id === 'partner_organisations' ||
+                                        section.id === 'participating_organisations') && !isApplicantSection;
+
+                                const isConsortiumSection =
                                     section.id === 'consortium' ||
-                                    section.id === 'partner_organisations' ||
-                                    section.id === 'participating_organisations';
+                                    section.title.toLowerCase() === 'consortium' ||
+                                    section.title.toLowerCase().includes('consortium members');
 
                                 const isWPSection =
                                     section.title.toLowerCase().includes('work package') ||
                                     section.title.toLowerCase().includes('workpackage') ||
+                                    section.title.toLowerCase().match(/^wp\d+/i) ||
                                     section.id.toLowerCase().includes('work_package') ||
                                     section.id.toLowerCase().includes('workpackage') ||
                                     section.id === 'workPlan' ||
@@ -1305,7 +1375,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                     <CardTitle className={`${section.level === 1 ? 'text-lg' : 'text-base uppercase tracking-wide text-primary/70'} font-semibold text-foreground/90`}>
                                                         {section.title
                                                             .replace(/^undefined\s*/gi, '')
-                                                            .replace(/\s*-\s*null$/i, '')
+                                                            .replace(/\s*-\s*null\b/gi, '')
                                                             .replace(/_/g, ' ')
                                                             .replace(/\b\w/g, l => l.toUpperCase())}
                                                     </CardTitle>
@@ -1316,20 +1386,22 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                         </p>
                                                     )}
                                                 </div>
-                                                {!isPartnerSection && (
+                                                {(!isPartnerSection && !isApplicantSection) && (
                                                     <Button variant="ghost" size="sm" onClick={() => handleEditSection(section.id, section.title, section.content)}>
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
                                                 )}
-                                                {isPartnerSection && (
+                                                {(isPartnerSection || isApplicantSection) && (
                                                     <Button variant="ghost" size="sm" onClick={() => setActiveTab('structured')}>
                                                         <Settings className="h-4 w-4" />
                                                     </Button>
                                                 )}
                                             </CardHeader>
                                             <CardContent>
-                                                {isPartnerSection ? (
-                                                    <DynamicPartnerSection partners={proposal?.partners || []} />
+                                                {isApplicantSection ? (
+                                                    <DynamicPartnerSection partners={(proposal?.partners || []).filter(p => p.isCoordinator)} />
+                                                ) : (isPartnerSection || isConsortiumSection) ? (
+                                                    <DynamicPartnerSection partners={(proposal?.partners || []).filter(p => isConsortiumSection ? true : !p.isCoordinator)} />
                                                 ) : isWPSection && proposal.workPackages && proposal.workPackages.length > 0 ? (
                                                     <div className="space-y-6">
                                                         {/* If there's specific narrative content, show it first */}
@@ -1481,36 +1553,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                             <Layers className="h-5 w-5 text-primary" />
                             Work Packages
                         </h3>
-                        <div className="space-y-4">
-                            {proposal.workPackages?.map((wp, idx) => (
-                                <Card key={idx} className="bg-card/30 border-border/40">
-                                    <CardHeader>
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <Badge variant="outline" className="mb-2 border-primary/30 text-primary">WP {idx + 1}</Badge>
-                                                <CardTitle className="text-lg">{wp.name}</CardTitle>
-                                            </div>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <p className="text-sm text-muted-foreground">{wp.description}</p>
-                                        {wp.deliverables && wp.deliverables.length > 0 && (
-                                            <div className="bg-secondary/30 rounded-lg p-4">
-                                                <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Deliverables</h5>
-                                                <ul className="space-y-2">
-                                                    {wp.deliverables.map((del, dIdx) => (
-                                                        <li key={dIdx} className="flex items-start gap-2 text-sm">
-                                                            <CheckCircle2 className="h-4 w-4 text-green-500/70 mt-0.5 shrink-0" />
-                                                            <span>{del}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                        <DynamicWorkPackageSection workPackages={proposal.workPackages} />
                     </section>
 
                     {/* Budget */}

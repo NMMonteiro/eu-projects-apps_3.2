@@ -256,6 +256,10 @@ OUTPUT FORMAT (JSON ONLY, no markdown):
     {
       "name": "WP1: Project Management",
       "description": "Detailed description of management and coordination",
+      "activities": [
+        { "name": "Kick-off Meeting", "description": "Organizing the internal launch event with all partners" },
+        { "name": "Quality Assurance", "description": "Continuous monitoring of tasks and deliverables" }
+      ],
       "deliverables": ["Grant Agreement", "Project Management Plan"]
     }
   ],
