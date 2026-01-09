@@ -9,6 +9,7 @@ import { PartnersPage } from './components/PartnersPage';
 import { SavedProposalsPage } from './components/SavedProposalsPage';
 import { SettingsPage } from './components/SettingsPage';
 import { ProposalViewerPage } from './components/ProposalViewerPage';
+import { ProposalViewerTestPage } from './components/ProposalViewerTestPage';
 import { PartnerEditPage } from './components/PartnerEditPage';
 import { FundingSchemeAdminPage } from './components/FundingSchemeAdminPage';
 import { TestExportPage } from './components/TestExportPage';
@@ -41,6 +42,12 @@ const ProposalViewerPageWrapper = () => {
     return <ProposalViewerPage proposalId={id} onBack={() => navigate('/saved')} />;
 };
 
+const ProposalViewerTestPageWrapper = () => {
+    const navigate = useNavigate();
+    const { id } = useParams();
+    return <ProposalViewerTestPage proposalId={id} onBack={() => navigate('/saved')} />;
+};
+
 function App() {
     return (
         <BrowserRouter>
@@ -54,6 +61,7 @@ function App() {
                     <Route path="/partners/:id" element={<PartnerEditPageWrapper />} />
                     <Route path="/saved" element={<SavedProposalsPageWrapper />} />
                     <Route path="/proposals/:id" element={<ProposalViewerPageWrapper />} />
+                    <Route path="/proposals-test/:id" element={<ProposalViewerTestPageWrapper />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/admin/funding-schemes" element={<FundingSchemeAdminPage />} />
                     <Route path="/test-export" element={<TestExportPage />} />

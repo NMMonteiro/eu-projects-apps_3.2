@@ -153,7 +153,6 @@ export function buildProposalPrompt(
   const flattenSections = (sections: any[]): FlatSection[] => {
     let result: FlatSection[] = [];
     sections.forEach(s => {
-      // Force a valid key from label if key is missing
       const fallbackKey = (s.label || 'section').toLowerCase().replace(/\s+/g, '_').replace(/\W/g, '');
       const validKey = s.key || fallbackKey;
 
@@ -178,7 +177,6 @@ export function buildProposalPrompt(
   // FORCE: If this is an Erasmus-style project or missing WPs, ensure we have slots for 4 WPs
   const hasMultipleWPs = allSections.some(s => s.key.includes('work_package_2'));
   if (!hasMultipleWPs && fundingScheme) {
-    // Check if we should add them (heuristic: if WP1 exists but WP2 doesn't)
     const wp1Idx = allSections.findIndex(s => s.key.includes('work_package_1'));
     if (wp1Idx !== -1) {
       allSections.splice(wp1Idx + 1, 0,
@@ -190,7 +188,7 @@ export function buildProposalPrompt(
   }
 
   const partnerInfo = partners.length > 0
-    ? `\n\nCONSORTIUM PARTNERS:\n${partners.map(p => `- ${p.name}${p.acronym ? ` (${p.acronym})` : ''} - ${p.country || 'Country not specified'}${p.isCoordinator ? ' [LEAD COORDINATOR]' : ''}\n  - Profile: ${p.description || 'No description'}\n  - Expertise: ${p.experience || ''}\n  - Past Projects: ${p.relevantProjects || ''}`).join('\n')}`
+    ? `\n\nCONSORTIUM PARTNERS (LOADED FROM DATABASE):\n${partners.map(p => `- ${p.name}${p.acronym ? ` (${p.acronym})` : ''} - ${p.country || 'Country not specified'}${p.isCoordinator ? ' [LEAD COORDINATOR]' : ''}\n  - Profile: ${p.description || 'No description'}\n  - Expertise: ${p.experience || ''}\n  - Past Projects: ${p.relevantProjects || ''}`).join('\n')}`
     : '';
 
   const userRequirements = userPrompt
@@ -203,12 +201,6 @@ The proposal MUST follow this specific structure. You MUST generate content for 
 ${allSections.map((s: FlatSection) =>
       `- ${s.label} (Key: "${s.key}"): ${s.description}${s.charLimit ? ` [Limit: ${s.charLimit} chars]` : ''}${s.aiPrompt ? ` [Instruction: ${s.aiPrompt}]` : ''}`
     ).join('\n')}`
-    : '';
-
-  const dynamicOutputFormat = fundingScheme
-    ? `\n  "dynamicSections": {
-${allSections.map((s: FlatSection) => `    "${s.key}": "<p>Detailed content for ${s.label}...</p>"`).join(',\n')}
-  },`
     : '';
 
   return `You are an expert EU funding proposal writer.
@@ -228,88 +220,51 @@ ${userRequirements}
 CURRENT CONTEXTUAL DATE: January 2026
 STRICT DATE RULES:
 1. All Project Start Dates MUST be in the future (after January 2026).
-2. DO NOT include "(dd/mm/yyyy)" in any labels or headers (e.g., use "Project Start Date:" instead of "Project Start Date (dd/mm/yyyy):").
-3. Currency MUST always be formatted with the symbol first and thousands separators, e.g., "€60,000" instead of "60000 €".
+2. DO NOT include "(dd/mm/yyyy)" in any labels or headers.
+3. Currency MUST always be formatted with the symbol first, e.g., "€60,000".
 
-
-TASK: Generate a comprehensive and HIGHLY DETAILED funding proposal.${fundingScheme ? ' Follow the FUNDING SCHEME TEMPLATE structure provided above.' : ''}
+TASK: Generate a comprehensive and HIGHLY DETAILED funding proposal.
 
 CRITICAL INSTRUCTIONS:
-1. **NO EMPTY SECTIONS**: You must provide rich, technical, and persuasive content for EVERY section and subsection key provided in the "dynamicSections" format. If a section seems redundant (like "English Translation" when the project is already in English), acknowledge it briefly or merge relevant summary content, but do not leave it blank. Specifically, if the project is in English, skip the secondary translation text and focus on the main summary.
-2. **RELEVANCE & IMPACT**: These sections must be exceptionally detailed. Provide a fundamental explanation of needs analysis, target groups, and long-term systemic impact. 
-3. **VERBATIM QUESTIONS**: Check the descriptions/instructions for each section and ensure you answer every verbatim question asked in the guidelines.
-4. **STYLE**: Use HTML formatting (<p>, <strong>, <ul>, <li>).
-5. **JSON INTEGRITY**: Return ONLY valid JSON. If the content is long, prioritize completing the JSON structure.
-6. **STRICT NAMING**: NEVER use the word "undefined" in any JSON key or content heading. If a field is unknown, omit it or use a professional generic title.
+1. **STRUCTURE PRIORITIZATION**: The JSON output format below puts structured data (partners, workPackages, budget) FIRST. You MUST complete these fully with data based on the provided partners and requirement.
+2. **BUDGET PRECISION**: If a budget total is specified (e.g. €250,000), the sum of all costs in the budget table MUST MATCH EXACTLY. Add a "Miscellaneous" or "Contingency" line if necessary.
+3. **FOUR WORK PACKAGES**: You MUST generate exactly 4 unique Work Packages (WP1 to WP4). Each needs unique activities and budget allocations.
+4. **ALL PARTNERS**: You MUST include ALL ${partners.length} selected partners in the "partners" array. Match names exactly.
+5. **NARRATIVE DEPTH**: Each section in "dynamicSections" must be 2-3 paragraphs of high-quality technical content.
 
-STRICT ADHERENCE RULES:
-- If a budget total is specified in requirements (e.g. €250,000), the sum of all costs in the budget table MUST MATCH EXACTLY.
-- MANDATORY ITEMS & REALISTIC RESEARCH: If the user requirements mention specific items (e.g. "10 VR sets", "AI tools", "hosting"), you MUST include these with realistic current market pricing.
-- DETAILED BREAKDOWN: Every main budget item MUST have specific sub-items in the "breakdown" array. Keep sub-items to max 5 per category to avoid output truncation.
-- CATEGORIES TO INCLUDE: Hardware, Software Licences/Subscriptions (AI apps, etc.), Domains/Hosting, Travel & Subsistence, Dissemination Costs, and Staff/Expert Rates.
-- Each narrative section MUST be well-structured and technical (approx 2-3 paragraphs each). DO NOT be overly brief, but prioritize depth over sheer word count.
-- **MANDATORY EXACTLY 4 WORK PACKAGES**: You MUST generate exactly 4 unique Work Packages (WP1, WP2, WP3, WP4) in the "workPackages" array AND in the "dynamicSections" object (using the keys work_package_1, work_package_2, work_package_3, work_package_4). Each WP must have its own unique name, technical description, detailed activities (with lead partner and budget), and deliverables.
-- TOKEN SAFETY: If the proposal is exceptionally long, prioritize quality over extreme length to ensure the JSON structure is completed before reaching token limits.
-
-
-OUTPUT FORMAT (JSON ONLY, no markdown):
+OUTPUT FORMAT (JSON ONLY):
 {
   "title": "${idea.title}",
-  "summary": "<p>Detailed executive summary...</p>",${dynamicOutputFormat}
-  "relevance": "<p>Broad overview of relevance (if not covered in dynamicSections)...</p>",
-  "impact": "<p>Broad overview of impact (if not covered in dynamicSections)...</p>",
   "partners": [
-    { 
-      "name": "Partner Name", 
-      "role": "Role in project", 
-      "isCoordinator": true,
-      "description": "Short description of role and contributions" 
-    }
+    { "name": "Partner Name", "role": "Role in project", "isCoordinator": true, "description": "..." }
   ],
   "workPackages": [
     {
       "name": "WP1: Project Management",
       "description": "...",
       "duration": "M1-M24",
-      "activities": [{ "name": "Kick-off", "description": "...", "leadPartner": "...", "participatingPartners": ["..."], "estimatedBudget": 5000 }],
-      "deliverables": ["Grant Agreement"]
+      "activities": [{ "name": "...", "description": "...", "leadPartner": "...", "participatingPartners": ["..."], "estimatedBudget": 5000 }],
+      "deliverables": ["..."]
     },
-    { "name": "WP2: Platform Development", "description": "...", "duration": "M3-M18", "activities": [...], "deliverables": [...] },
-    { "name": "WP3: Implementation & Piloting", "description": "...", "duration": "M12-M24", "activities": [...], "deliverables": [...] },
-    { "name": "WP4: Dissemination", "description": "...", "duration": "M1-M24", "activities": [...], "deliverables": [...] }
-  ],
-  "risks": [
-    {
-      "risk": "Technical failure",
-      "likelihood": "Low",
-      "impact": "High",
-      "mitigation": "Redundancy and expert review"
-    }
+    { "name": "WP2: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
+    { "name": "WP3: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] },
+    { "name": "WP4: ...", "description": "...", "duration": "...", "activities": [...], "deliverables": [...] }
   ],
   "budget": [
     {
-      "item": "Hardware & Equipment",
-      "cost": 6500,
-      "description": "Purchase of VR Headsets and local servers",
-      "breakdown": [
-        { "subItem": "Meta Quest 3 Headsets", "quantity": 10, "unitCost": 550, "total": 5500 },
-        { "subItem": "Local Media Server", "quantity": 1, "unitCost": 1000, "total": 1000 }
-      ],
-      "partnerAllocations": [
-        { "partner": "Lead Partner", "amount": 4000 },
-        { "partner": "Partner A", "amount": 2500 }
-      ]
+      "item": "...",
+      "cost": 10000,
+      "description": "...",
+      "breakdown": [{ "subItem": "...", "quantity": 1, "unitCost": 10000, "total": 10000 }],
+      "partnerAllocations": [{ "partner": "...", "amount": 10000 }]
     }
   ],
-  "partnerBudgetSummary": [
-    { "partner": "Lead Partner Name", "total": "€XXXXX", "percentage": "XX%" }
-  ],
-  "timeline": [
-    { "phase": "M1-M6: Setup", "activities": ["Kick-off", "Requirement gathering"], "startMonth": 1, "endMonth": 6 }
-  ]
+  "risks": [{ "risk": "...", "likelihood": "Low", "impact": "High", "mitigation": "..." }],
+  "summary": "<p>...</p>",
+  "dynamicSections": {
+    ${allSections.map((s: FlatSection) => `"${s.key}": "<p>Content for ${s.label}...</p>"`).join(',\n    ')}
+  }
 }
-
-CRITICAL: If the "dynamicSections" includes "work_package_1", "work_package_2", etc., you MUST ensure the "workPackages" array has EXACTLY those entries in the same order, with matching names and detailed data. DO NOT repeat content. Each Work Package must be unique.
 
 Return ONLY valid JSON.`;
 }

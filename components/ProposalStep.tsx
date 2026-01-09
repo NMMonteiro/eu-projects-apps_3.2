@@ -114,7 +114,8 @@ export function ProposalStep({
 
     const handleViewDetailed = () => {
         if (proposal?.id && onViewProposal) {
-            onViewProposal(proposal.id);
+            // Use the test viewer path directly
+            window.location.href = `/proposals-test/${proposal.id}`;
         }
     };
 
