@@ -229,6 +229,8 @@ BUDGET CONSTRAINTS:
 - Total: ${finalBudgetStr} (${budgetNum} EUR)
 - Rule: USE ONLY LARGE INTEGERS for "cost", "unitCost", and "amount".
 - STRICT TOTAL: The sum of all items in the "budget" array MUST equal EXACTLY ${budgetNum} EUR.
+- PRIORITY: If a different budget was mentioned in the user prompt, IGNORE it and USE EXACTLY ${budgetNum} EUR.
+- PARTNER ALLOCATION: Distribute the ${budgetNum} EUR across all ${partners.length} partners in the "partnerAllocations" arrays.
 
 STRICT OUTPUT CONTRACT:
 1. **PARTNERS MAPPING**: 

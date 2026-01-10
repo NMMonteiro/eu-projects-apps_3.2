@@ -179,16 +179,32 @@ const rebalanceBudget = (proposal: any, targetBudget: number) => {
 
     console.log(`⚖️ Rebalancing budget to target: ${targetBudget}`);
 
-    // 1. Rebalance main budget items (Categories)
+    // 1. Proportional scaling for main budget items
     let currentTotal = proposal.budget.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
 
-    if (currentTotal !== targetBudget && proposal.budget.length > 0) {
-        // Adjust the largest item to avoid small items becoming negative or weird
-        const sortedItems = [...proposal.budget].sort((a, b) => (b.cost || 0) - (a.cost || 0));
-        const largestItem = sortedItems[0];
-        const diff = targetBudget - currentTotal;
-        largestItem.cost = (largestItem.cost || 0) + diff;
-        console.log(`   - Adjusted item "${largestItem.item}" by ${diff} to match total.`);
+    if (currentTotal > 0 && Math.abs(currentTotal - targetBudget) > 1) {
+        const scaleFactor = targetBudget / currentTotal;
+        let runningTotal = 0;
+
+        proposal.budget.forEach((item: any, idx: number) => {
+            if (idx === proposal.budget.length - 1) {
+                // Last item gets the remainder to ensure exact match
+                item.cost = targetBudget - runningTotal;
+            } else {
+                item.cost = Math.round((item.cost || 0) * scaleFactor);
+                runningTotal += item.cost;
+            }
+        });
+        console.log(`   - Scaled budget items by factor ${scaleFactor.toFixed(4)}`);
+    } else if (currentTotal === 0 && targetBudget > 0) {
+        // Fallback if AI returned no budget - create a default item
+        proposal.budget = [{
+            item: "Project Implementation",
+            cost: targetBudget,
+            description: "Total project implementation costs as per target budget.",
+            breakdown: [{ subItem: "Operational Costs", quantity: 1, unitCost: targetBudget, total: targetBudget }],
+            partnerAllocations: proposal.partners?.map((p: any) => ({ partner: p.name, amount: Math.floor(targetBudget / proposal.partners.length) })) || []
+        }];
     }
 
     // 2. Ensure internal consistency for each budget item (breakdown and partnerAllocations)
