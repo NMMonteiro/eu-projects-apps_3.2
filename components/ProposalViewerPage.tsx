@@ -26,6 +26,7 @@ import {
     DynamicRiskSection,
     DynamicPartnerSection
 } from './ProposalSections';
+import { assembleDocument, DisplaySection } from '../utils/proposal-assembly';
 
 interface ProposalViewerPageProps {
     proposalId: string;
@@ -672,91 +673,8 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         );
     }
 
-    // Build sections array including custom sections and aligning with funding scheme template
-    let baseSections: { id: string; title: string; content: string | undefined; type?: string; level?: number }[] = [];
-    const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
-    const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
-    if (fundingScheme?.template_json?.sections) {
-        const renderedWPIndices = new Set<number>();
-
-        // Function to recursively flatten template sections with level and description
-        const processTemplateSections = (templateSections: any[], level = 1): any[] => {
-            let flattened: any[] = [];
-            [...templateSections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
-                const lowerKey = ts.key?.toLowerCase() || "";
-                const lowerLabel = ts.label?.toLowerCase() || "";
-                const isWP = lowerKey.includes('work_package') || lowerLabel.includes('work package');
-
-                if (isWP) {
-                    const match = lowerKey.match(/work_package_(\d+)/i) || lowerLabel.match(/work package (\d+)/i);
-                    if (match) {
-                        renderedWPIndices.add(parseInt(match[1]) - 1);
-                    }
-                }
-
-                flattened.push({
-                    id: ts.key,
-                    title: ts.label,
-                    content: dynamicSections[ts.key],
-                    description: ts.description, // Verbatim questions
-                    type: ts.type,
-                    level: level
-                });
-                if (ts.subsections && ts.subsections.length > 0) {
-                    flattened = [...flattened, ...processTemplateSections(ts.subsections, level + 1)];
-                }
-            });
-            return flattened;
-        };
-
-        baseSections = processTemplateSections(fundingScheme.template_json.sections);
-
-        // Add missing Work Packages if they exist in structured data but weren't in template
-        if (proposal.workPackages && proposal.workPackages.length > 0) {
-            proposal.workPackages.forEach((wp, idx) => {
-                if (!renderedWPIndices.has(idx)) {
-                    baseSections.push({
-                        id: `work_package_${idx + 1}`,
-                        title: wp.name || `Work Package ${idx + 1}`,
-                        content: wp.description,
-                        type: 'work_package',
-                        level: 2
-                    });
-                }
-            });
-        }
-    } else if (Object.keys(dynamicSections).length > 0) {
-        baseSections = Object.entries(dynamicSections).map(([key, content], idx) => ({
-            id: key,
-            title: `${idx + 1}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
-            content: content as string
-        }));
-    } else {
-        baseSections = [
-            { id: 'introduction', title: '1. Introduction', content: proposal.introduction },
-            { id: 'relevance', title: '2. Relevance', content: proposal.relevance },
-            { id: 'objectives', title: '3. Objectives', content: proposal.objectives },
-            { id: 'methodology', title: '4. Methodology', content: proposal.methodology || proposal.methods },
-            { id: 'workPlan', title: '5. Work Plan', content: proposal.workPlan },
-            { id: 'expectedResults', title: '6. Expected Results', content: proposal.expectedResults },
-            { id: 'impact', title: '7. Impact', content: proposal.impact },
-            { id: 'innovation', title: '8. Innovation', content: proposal.innovation },
-            { id: 'sustainability', title: '9. Sustainability', content: proposal.sustainability },
-            { id: 'consortium', title: '10. Consortium', content: proposal.consortium },
-            { id: 'riskManagement', title: '11. Risk Management', content: proposal.riskManagement },
-            { id: 'dissemination', title: '12. Dissemination & Communication', content: proposal.dissemination },
-        ];
-    }
-
-    // Add custom sections if they exist
-    const customSections = (proposal.customSections || []).map((section: any, idx: number) => ({
-        id: section.id || `custom-${idx}`,
-        title: `${baseSections.length + idx + 1}. ${section.title}`,
-        content: section.content,
-        isCustom: true
-    }));
-
-    const sections = [...baseSections, ...customSections];
+    // Build sections array using shared assembly logic
+    const sections = assembleDocument(proposal);
 
     return (
         <div className="space-y-6 pb-10 animate-in fade-in duration-500">
@@ -874,129 +792,77 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                             </a>
                                         </div>
 
-                                        {/* Main Sections Folder */}
+                                        {/* Main Sections Hierarchy */}
                                         <div className="mt-2">
                                             <div className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group">
                                                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
                                                 <Folder className="h-3.5 w-3.5 text-yellow-500/80" />
                                                 <span className="text-muted-foreground font-medium flex-1">Narrative Sections</span>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-5 w-5 rounded opacity-0 group-hover:opacity-100 transition-opacity bg-primary/10 hover:bg-primary/20"
-                                                    title="Add Section"
-                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                                >
-                                                    <span className="text-primary text-xs font-bold">+</span>
-                                                </Button>
                                             </div>
                                             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
-                                                {sections.map((section: any) => (
-                                                    (section.content || section.description) && (
+                                                {sections.filter(s => s.id !== 'summary' && !s.isDivider).map((section: any) => {
+                                                    const isWP = section.type === 'work_package' || section.wpIdx !== undefined;
+                                                    const isBudget = section.type === 'budget';
+                                                    const isRisk = section.type === 'risk';
+                                                    const isPartners = section.type === 'partners' || section.type === 'partner_profiles';
+
+                                                    let Icon = FileText;
+                                                    let iconColor = "text-primary/70";
+                                                    if (isWP) { Icon = Layers; iconColor = "text-blue-500/70"; }
+                                                    else if (isBudget) { Icon = DollarSign; iconColor = "text-emerald-500/70"; }
+                                                    else if (isRisk) { Icon = AlertTriangle; iconColor = "text-orange-500/70"; }
+                                                    else if (isPartners) { Icon = Users; iconColor = "text-green-500/70"; }
+
+                                                    return (
                                                         <a
                                                             key={section.id}
                                                             href={`#${section.id}`}
+                                                            onClick={(e) => {
+                                                                if (isWP || isBudget || isRisk || isPartners) {
+                                                                    e.preventDefault();
+                                                                    setActiveTab('structured');
+                                                                    setTimeout(() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                                                }
+                                                            }}
                                                             className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground group"
-                                                            style={{ paddingLeft: section.level ? `${(section.level - 1) * 12 + 8}px` : '8px' }}
+                                                            style={{ paddingLeft: section.level ? `${Math.max(0, section.level - 1) * 12 + 8}px` : '8px' }}
                                                         >
                                                             <div className="h-3.5 w-3.5 flex items-center justify-center">
-                                                                <div className={`h-1.5 w-1.5 rounded-full ${section.level > 1 ? 'bg-primary/20' : 'bg-primary/50'} group-hover:bg-primary`}></div>
+                                                                <Icon className={`h-3 w-3 ${iconColor}`} />
                                                             </div>
                                                             <span className={`truncate ${section.level === 1 ? 'font-medium' : 'text-xs'}`}>{section.title}</span>
                                                         </a>
-                                                    )
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 
-                                        {/* Work Packages Folder */}
-                                        {proposal.workPackages && proposal.workPackages.length > 0 && (
-                                            <div className="mt-2">
-                                                <div
-                                                    className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group"
-                                                    onClick={() => {
-                                                        setActiveTab('structured');
-                                                        setTimeout(() => document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                    }}
-                                                >
-                                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
-                                                    <Folder className="h-3.5 w-3.5 text-blue-500/80" />
-                                                    <span className="text-muted-foreground font-medium flex-1">Work Packages</span>
-                                                    <span className="text-xs text-muted-foreground/60">{proposal.workPackages.length}</span>
-                                                </div>
-                                                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
-                                                    {proposal.workPackages.map((wp, idx) => (
-                                                        <div
-                                                            key={idx}
-                                                            onClick={() => {
-                                                                setActiveTab('structured');
-                                                                setTimeout(() => document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                            }}
-                                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground group cursor-pointer"
-                                                        >
-                                                            <Layers className="h-3.5 w-3.5 text-blue-500/60" />
-                                                            <span className="text-xs truncate">{wp.name || `WP ${idx + 1}`}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
+                                        {/* Structured Data Shortcuts */}
+                                        <div className="mt-4 pt-4 border-t border-border/40">
+                                            <h4 className="px-2 mb-2 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-tighter">Quick Access</h4>
 
-                                        {/* Partners Folder */}
-                                        {proposal.partners && proposal.partners.length > 0 && (
-                                            <div className="mt-2">
-                                                <div
-                                                    className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group"
-                                                    onClick={() => {
-                                                        setActiveTab('structured');
-                                                        setTimeout(() => document.getElementById('partners')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                    }}
-                                                >
-                                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform" />
-                                                    <Folder className="h-3.5 w-3.5 text-green-500/80" />
-                                                    <span className="text-muted-foreground font-medium flex-1">Consortium</span>
-                                                    <span className="text-xs text-muted-foreground/60">{proposal.partners.length}</span>
-                                                </div>
-                                                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
-                                                    <div
-                                                        onClick={() => {
-                                                            setActiveTab('structured');
-                                                            setTimeout(() => document.getElementById('partners')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                        }}
-                                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground cursor-pointer"
-                                                    >
-                                                        <Users className="h-3.5 w-3.5 text-green-500/60" />
-                                                        <span className="text-xs">View All Partners</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Budget Folder */}
-                                        <div className="mt-2">
                                             <div
-                                                onClick={() => {
-                                                    setActiveTab('structured');
-                                                    setTimeout(() => document.getElementById('budget')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                }}
-                                                className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group"
+                                                onClick={() => { setActiveTab('structured'); setTimeout(() => document.getElementById('work-packages')?.scrollIntoView({ behavior: 'smooth' }), 100); }}
+                                                className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-secondary/30 cursor-pointer text-muted-foreground hover:text-foreground"
                                             >
-                                                <DollarSign className="h-3.5 w-3.5 text-emerald-500/80" />
-                                                <span className="text-muted-foreground font-medium">Budget</span>
+                                                <Layers className="h-3 w-3 text-blue-500/60" />
+                                                <span>Work Packages</span>
                                             </div>
-                                        </div>
 
-                                        {/* Risks Folder */}
-                                        <div className="mt-2">
                                             <div
-                                                onClick={() => {
-                                                    setActiveTab('structured');
-                                                    setTimeout(() => document.getElementById('risks')?.scrollIntoView({ behavior: 'smooth' }), 100);
-                                                }}
-                                                className="flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md hover:bg-secondary/30 cursor-pointer group"
+                                                onClick={() => { setActiveTab('structured'); setTimeout(() => document.getElementById('partners')?.scrollIntoView({ behavior: 'smooth' }), 100); }}
+                                                className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-secondary/30 cursor-pointer text-muted-foreground hover:text-foreground"
                                             >
-                                                <AlertTriangle className="h-3.5 w-3.5 text-orange-500/80" />
-                                                <span className="text-muted-foreground font-medium">Risk Management</span>
+                                                <Users className="h-3 w-3 text-green-500/60" />
+                                                <span>Consortium</span>
+                                            </div>
+
+                                            <div
+                                                onClick={() => { setActiveTab('structured'); setTimeout(() => document.getElementById('budget')?.scrollIntoView({ behavior: 'smooth' }), 100); }}
+                                                className="flex items-center gap-2 px-2 py-1.5 text-xs rounded-md hover:bg-secondary/30 cursor-pointer text-muted-foreground hover:text-foreground"
+                                            >
+                                                <DollarSign className="h-3 w-3 text-emerald-500/60" />
+                                                <span>National Budget</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1007,16 +873,23 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         {/* Content Sections */}
                         <div className="col-span-1 lg:col-span-3 space-y-8">
                             {sections.map((section) => {
-                                if (!section.content) return null;
+                                const isWP = section.type === 'work_package' || (section.wpIdx !== undefined);
+                                const isWPList = section.type === 'wp_list';
+                                const isBudget = section.type === 'budget';
+                                const isRisk = section.type === 'risk';
+                                const isPartners = section.type === 'partners';
+                                const isProfiles = section.type === 'partner_profiles';
 
-                                const isPartnerSection =
+                                if (!section.content && !isWP && !isWPList && !isBudget && !isRisk && !isPartners && !isProfiles) return null;
+
+                                const isPartnerSection = isPartners || isProfiles ||
                                     section.title.toLowerCase().includes('partner organisation') ||
                                     section.title.toLowerCase().includes('participating organisation') ||
                                     section.id === 'consortium' ||
                                     section.id === 'partner_organisations' ||
                                     section.id === 'participating_organisations';
 
-                                const isWPSection =
+                                const isWPSection = isWP ||
                                     section.title.toLowerCase().includes('work package') ||
                                     section.title.toLowerCase().includes('workpackage') ||
                                     section.id.toLowerCase().includes('work_package') ||
@@ -1024,14 +897,15 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                     section.id === 'workPlan' ||
                                     section.id === 'tasks';
 
-                                const isBudgetSection =
+                                const isBudgetSection = isBudget ||
                                     section.title.toLowerCase().includes('budget') ||
                                     section.id.toLowerCase().includes('budget') ||
                                     section.id === 'financial_overview';
 
-                                const isRiskSection =
+                                const isRiskSection = isRisk ||
                                     section.title.toLowerCase().includes('risk') ||
                                     section.id.toLowerCase().includes('risk') ||
+                                    section.title.toLowerCase().includes('mitigation') ||
                                     section.id === 'riskManagement';
 
                                 return (
@@ -1061,62 +935,53 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                 )}
                                             </CardHeader>
                                             <CardContent>
-                                                {isPartnerSection ? (
-                                                    <DynamicPartnerSection partners={proposal?.partners || []} />
-                                                ) : isWPSection && proposal.workPackages && proposal.workPackages.length > 0 ? (
-                                                    <div className="space-y-6">
-                                                        {/* If there's specific narrative content, show it first */}
-                                                        {section.content && section.content.length > 50 && (
-                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
-                                                                <ResponsiveSectionContent content={section.content} />
-                                                            </div>
-                                                        )}
-                                                        {(() => {
-                                                            const match = section.id.match(/work_package_(\d+)/i) || section.title.toLowerCase().match(/work package (\d+)/i);
-                                                            const wpIdx = match ? parseInt(match[1]) - 1 : undefined;
-                                                            return <DynamicWorkPackageSection workPackages={proposal.workPackages} limitToIndex={wpIdx} currency={settings.currency} />;
-                                                        })()}
-                                                    </div>
-                                                ) : isBudgetSection && proposal.budget && proposal.budget.length > 0 ? (
-                                                    <div className="space-y-6">
-                                                        {section.content && section.content.length > 50 && (
-                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
-                                                                <ResponsiveSectionContent content={section.content} />
-                                                            </div>
-                                                        )}
-                                                        <DynamicBudgetSection budget={proposal.budget} currency={settings.currency} />
-                                                    </div>
-                                                ) : isRiskSection && proposal.risks && proposal.risks.length > 0 ? (
-                                                    <div className="space-y-6">
-                                                        {section.content && section.content.length > 50 && (
-                                                            <div className="prose prose-invert prose-sm max-w-none text-muted-foreground mb-4">
-                                                                <ResponsiveSectionContent content={section.content} />
-                                                            </div>
-                                                        )}
-                                                        <DynamicRiskSection risks={proposal.risks} />
-                                                    </div>
-                                                ) : (
-                                                    <div className="overflow-x-auto pb-4">
-                                                        <div className="prose prose-invert prose-sm max-w-none prose-p:text-muted-foreground/90 prose-headings:text-foreground prose-strong:text-primary/90 prose-li:text-muted-foreground/90 [&_table]:min-w-[1000px] [&_table]:border-collapse [&_table]:text-xs [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-3 [&_td]:align-top [&_tr]:border-b [&_tr]:border-border/50">
-                                                            {section.content ? (
-                                                                <ResponsiveSectionContent content={section.content} />
-                                                            ) : (
-                                                                <div className="py-8 text-center border-2 border-dashed border-border/20 rounded-xl bg-secondary/10">
-                                                                    <p className="text-sm text-muted-foreground italic">No content generated for this section.</p>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="sm"
-                                                                        className="mt-4 text-primary"
-                                                                        onClick={() => handleEditSection(section.id, section.title, '')}
-                                                                    >
-                                                                        <Plus className="h-4 w-4 mr-2" />
-                                                                        Generate with AI
-                                                                    </Button>
-                                                                </div>
-                                                            )}
+                                                <div className="space-y-6">
+                                                    {section.content && (
+                                                        <div className="prose prose-invert prose-sm max-w-none text-muted-foreground/90">
+                                                            <ResponsiveSectionContent content={section.content} />
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    )}
+
+                                                    {/* Structured Inserts */}
+                                                    {isPartners && (
+                                                        <div className="bg-card/10 border border-border/20 rounded-xl overflow-hidden shadow-sm shadow-black/20">
+                                                            <table className="w-full text-left border-collapse text-xs">
+                                                                <thead className="bg-secondary/40 text-muted-foreground font-bold uppercase tracking-wider border-b border-border/20">
+                                                                    <tr>
+                                                                        <th className="py-3 px-4">Role</th>
+                                                                        <th className="py-3 px-4">Organisation</th>
+                                                                        <th className="py-3 px-4">Country</th>
+                                                                        <th className="py-3 px-4">Type</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-border/10">
+                                                                    {proposal.partners?.map((p, pIdx) => (
+                                                                        <tr key={pIdx}>
+                                                                            <td className="py-3 px-4">
+                                                                                <span className={p.isCoordinator ? "bg-primary/20 text-primary px-2 py-0.5 rounded text-[10px] font-bold" : "text-muted-foreground"}>
+                                                                                    {p.isCoordinator ? 'Coordinator' : 'Partner'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="py-3 px-4 font-semibold text-foreground/80">{p.name}</td>
+                                                                            <td className="py-3 px-4 text-muted-foreground">{p.country}</td>
+                                                                            <td className="py-3 px-4 text-muted-foreground/60 italic">{p.organizationType || 'SME'}</td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                    {isProfiles && <DynamicPartnerSection partners={proposal.partners || []} />}
+                                                    {(isWP || isWPList) && <DynamicWorkPackageSection workPackages={proposal.workPackages || []} limitToIndex={section.wpIdx} currency={settings.currency || 'EUR'} />}
+                                                    {isBudget && <DynamicBudgetSection budget={proposal.budget || []} currency={settings.currency || 'EUR'} />}
+                                                    {isRisk && <DynamicRiskSection risks={proposal.risks || []} />}
+
+                                                    {!section.content && !isWP && !isWPList && !isBudget && !isRisk && !isPartners && !isProfiles && (
+                                                        <div className="py-8 text-center border-2 border-dashed border-border/20 rounded-xl bg-secondary/10">
+                                                            <p className="text-sm text-muted-foreground italic">No content generated for this section.</p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </CardContent>
                                         </Card>
                                     </div>

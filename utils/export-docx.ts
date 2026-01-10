@@ -21,6 +21,7 @@
 import { saveAs } from "file-saver";
 import { FullProposal, WorkPackage } from "../types/proposal";
 import { Partner } from "../types/partner";
+import { assembleDocument, DisplaySection } from "./proposal-assembly";
 
 // ============================================================================
 // STYLING CONSTANTS (EU PROFESSIONAL STYLE)
@@ -276,11 +277,47 @@ function createWorkPackageTable(wps: WorkPackage[]): Table {
     children: [
       createTableHeaderCell("WP No."),
       createTableHeaderCell("Work Package Name"),
-      createTableHeaderCell("Activities / Deliverables"),
+      createTableHeaderCell("Activities & Deliverables"),
     ]
   }));
 
   wps.forEach((wp, idx) => {
+    const activityItems: Paragraph[] = [];
+
+    // Add activities if they exist
+    if (wp.activities && wp.activities.length > 0) {
+      activityItems.push(new Paragraph({
+        children: [new TextRun({ text: "Activities:", bold: true, font: FONT, size: 18, color: COLOR_PRIMARY })],
+        spacing: { before: 80, after: 40 }
+      }));
+      wp.activities.forEach(act => {
+        activityItems.push(new Paragraph({
+          children: [new TextRun({ text: `• ${act.name}`, bold: true, font: FONT, size: 18 })],
+          spacing: { before: 20 }
+        }));
+        if (act.description) {
+          activityItems.push(new Paragraph({
+            children: [new TextRun({ text: `  ${act.description}`, font: FONT, size: 16, color: "666666" })],
+            spacing: { after: 40 }
+          }));
+        }
+      });
+    }
+
+    // Add deliverables
+    if (wp.deliverables && wp.deliverables.length > 0) {
+      activityItems.push(new Paragraph({
+        children: [new TextRun({ text: "Deliverables:", bold: true, font: FONT, size: 18, color: COLOR_PRIMARY })],
+        spacing: { before: 80, after: 40 }
+      }));
+      wp.deliverables.forEach(del => {
+        activityItems.push(new Paragraph({
+          children: [new TextRun({ text: `• ${del}`, font: FONT, size: 18 })],
+          spacing: { before: 20, after: 20 }
+        }));
+      });
+    }
+
     rows.push(new TableRow({
       children: [
         new TableCell({
@@ -291,16 +328,11 @@ function createWorkPackageTable(wps: WorkPackage[]): Table {
         new TableCell({
           children: [
             new Paragraph({ children: [new TextRun({ text: wp.name, bold: true, font: FONT, size: BODY_SIZE })] }),
-            new Paragraph({ children: [new TextRun({ text: wp.description, font: FONT, size: 18, color: "666666" })] }),
+            ...convertHtmlToParagraphs(wp.description, "WP Description")
           ]
         }),
         new TableCell({
-          children: (wp.deliverables || []).map(del =>
-            new Paragraph({
-              children: [new TextRun({ text: `• ${del}`, font: FONT, size: 18 })],
-              spacing: { before: 40, after: 40 }
-            })
-          )
+          children: activityItems.length > 0 ? activityItems : [new Paragraph({ text: "-" })]
         })
       ]
     }));
@@ -460,14 +492,6 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     const p = proposal;
     const fScheme = p.fundingScheme || (p as any).funding_scheme;
     const currency = p.settings?.currency || "EUR";
-
-    let renderedPartnersSummary = false;
-    let renderedPartnersDetailed = false;
-    let renderedWorkPackages = false;
-    let renderedBudget = false;
-    let renderedRisks = false;
-    const renderedWPIndices = new Set<number>();
-
     const docChildren: any[] = [];
 
     // 1. TITLE PAGE
@@ -526,182 +550,107 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
 
     docChildren.push(new Paragraph({ children: [new PageBreak()] }));
 
-    // 2. EXECUTIVE SUMMARY
+    // 2. EXECUTIVE SUMMARY (Always first as Part A)
     docChildren.push(createSectionHeader("Part B: Technical Narrative", 1));
     docChildren.push(createSectionHeader("0. Executive Summary", 2));
     docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary"));
 
-    // 3. DYNAMIC NARRATIVE SECTIONS
-    const dyn = p.dynamicSections || (p as any).dynamic_sections || {};
-    const templateSections = fScheme?.template_json?.sections;
+    // 3. ASSEMBLED SECTIONS (STRICT ORDER)
+    const finalDocument = assembleDocument(p);
 
-    if (templateSections && templateSections.length > 0) {
-      const processSectionsObject = (sectionsArr: any[], level = 2) => {
-        [...sectionsArr].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
-          const content = dyn[ts.key];
-          const title = sanitizeTitle(ts.label);
-          const description = ts.description;
-          const lowerKey = ts.key?.toLowerCase() || "";
-          const lowerTitle = title.toLowerCase();
+    finalDocument.forEach((section: DisplaySection) => {
+      const isWP = section.type === 'work_package';
+      const isWPList = section.type === 'wp_list';
+      const isBudget = section.type === 'budget';
+      const isRisk = section.type === 'risk';
+      const isPartners = section.type === 'partners';
+      const isProfiles = section.type === 'partner_profiles';
 
-          if (!title || title.toLowerCase().includes('undefined')) return;
+      // Skip if completely empty
+      if (!section.content && !isWP && !isWPList && !isBudget && !isRisk && !isPartners && !isProfiles) return;
 
-          docChildren.push(createSectionHeader(title, Math.min(level, 4)));
+      // Section Header
+      docChildren.push(createSectionHeader(section.title, Math.min(section.level + 1, 4)));
 
-          if (description) {
-            docChildren.push(new Paragraph({
-              children: [
-                new TextRun({ text: "GUIDELINES: ", bold: true, size: 16, color: "999999", font: FONT }),
-                new TextRun({ text: description, italics: true, size: 16, color: "666666", font: FONT }),
-              ],
-              spacing: { before: 100, after: 100 },
-              shading: { fill: "F5F5F5" }
-            }));
-          }
-
-          const isParticipating = lowerKey.includes('participating') || lowerTitle.includes('participating');
-          const isBackground = lowerKey.includes('background') || lowerTitle.includes('background');
-          const isPartner = lowerKey.includes('partner_organisation') || lowerTitle.includes('partner organisation');
-          const isApplicant = lowerKey.includes('applicant_organisation') || lowerTitle.includes('applicant organisation') || lowerTitle.includes('applicant');
-          const isWP = lowerKey.includes('work_package') || lowerKey.includes('workpackage') || lowerTitle.includes('work package');
-          const isBudget = lowerKey.includes('budget') || lowerTitle.includes('budget');
-          const isRisk = lowerKey.includes('risk') || lowerTitle.includes('risk');
-
-          if (content) {
-            const allowedNames = (isPartner || isParticipating || isBackground || isApplicant)
-              ? p.partners?.map(pt => pt.name)
-              : undefined;
-
-            // If it's an applicant section and content is just placeholder, we might swap it later
-            docChildren.push(...convertHtmlToParagraphs(content, title, allowedNames));
-          }
-
-          if (isParticipating && p.partners?.length > 0 && !renderedPartnersSummary) {
-            renderedPartnersSummary = true;
-            docChildren.push(createParagraph("Participating Organisations Summary:", { bold: true, italic: true, color: COLOR_PRIMARY }));
-            docChildren.push(createPartnerListTable(p.partners.map(normalizePartner)));
-          } else if ((isPartner || isBackground || isApplicant) && p.partners?.length > 0 && !renderedPartnersDetailed) {
-            renderedPartnersDetailed = true;
-            docChildren.push(createParagraph("Institutional Profiles and Technical Capacity:", { bold: true, italic: true, color: COLOR_PRIMARY }));
-
-            // Special Case: If it's the Applicant section, specifically start with Coordinator
-            const coordinator = p.partners.find(pt => {
-              const n = normalizePartner(pt);
-              return n.isCoordinator;
-            });
-
-            if (isApplicant && coordinator) {
-              const partner = normalizePartner(coordinator);
-              docChildren.push(createSectionHeader(`Applicant: ${partner.name}`, 3));
-              docChildren.push(createDetailedPartnerProfile(partner));
-              docChildren.push(new Paragraph({ text: "" }));
-            }
-
-            // Then show all partners
-            p.partners.forEach((rawPartner, pIdx) => {
-              const partner = normalizePartner(rawPartner);
-              // Avoid duplicating coordinator if already shown in applicant section above (optional, but cleaner)
-              if (isApplicant && partner.isCoordinator) return;
-
-              docChildren.push(createSectionHeader(`${pIdx + 1}. ${partner.name}${partner.acronym ? ` (${partner.acronym})` : ''}`, 3));
-              docChildren.push(createDetailedPartnerProfile(partner));
-              docChildren.push(new Paragraph({ text: "" }));
-            });
-          } else if (isWP && p.workPackages?.length > 0) {
-            // Enhanced WP matching: catches "Work Package 1", "WP1", "WP 1", etc.
-            const wpMatch = lowerTitle.match(/work package (\d+)/i) ||
-              lowerKey.match(/work_package_(\d+)/i) ||
-              lowerTitle.match(/wp\s*(\d+)/i);
-
-            if (wpMatch) {
-              const wpIdx = parseInt(wpMatch[1]) - 1;
-              if (p.workPackages[wpIdx]) {
-                const wp = normalizeWorkPackage(p.workPackages[wpIdx], wpIdx);
-                renderedWPIndices.add(wpIdx);
-                // Mark as fully rendered only if we've seen all WPs
-                if (renderedWPIndices.size === p.workPackages.length) renderedWorkPackages = true;
-
-                docChildren.push(createParagraph(`Implementation Plan for ${wp.name}:`, { bold: true, italic: true, color: COLOR_PRIMARY }));
-                docChildren.push(createWorkPackageTable([wp]));
-              }
-            } else if (!renderedWorkPackages) {
-              // This acts as a catch-all for a general "Work Plan" or "Methodology" section
-              renderedWorkPackages = true;
-              docChildren.push(createParagraph("Work Package Overview and Implementation Plan:", { bold: true, italic: true, color: COLOR_PRIMARY }));
-              const normalizedWPs = p.workPackages.map((wp, i) => normalizeWorkPackage(wp, i));
-              docChildren.push(createWorkPackageTable(normalizedWPs));
-              p.workPackages.forEach((_, i) => renderedWPIndices.add(i));
-            }
-          } else if (isBudget && p.budget?.length > 0 && !renderedBudget) {
-            renderedBudget = true;
-            docChildren.push(createParagraph("Detailed Budget Table:", { bold: true, italic: true, color: COLOR_PRIMARY }));
-            docChildren.push(createBudgetTable(p.budget, currency));
-          } else if (isRisk && p.risks?.length > 0 && !renderedRisks) {
-            renderedRisks = true;
-            docChildren.push(createParagraph("Risk Assessment:", { bold: true, italic: true, color: COLOR_PRIMARY }));
-            docChildren.push(createRiskTable(p.risks));
-          }
-
-          if (ts.subsections && ts.subsections.length > 0) {
-            processSectionsObject(ts.subsections, level + 1);
-          }
-        });
-      };
-      processSectionsObject(templateSections);
-    } else {
-      Object.entries(dyn).forEach(([key, content], idx) => {
-        let cleanKey = key.replace(/^undefined_/i, '').replace(/_undefined$/i, '');
-        if (cleanKey === 'undefined' || !cleanKey) cleanKey = `Section ${idx + 1}`;
-        const title = cleanKey.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-        docChildren.push(createSectionHeader(`${idx + 1}. ${title}`, 2));
-        docChildren.push(...convertHtmlToParagraphs(content as string, title));
-      });
-    }
-
-    docChildren.push(new Paragraph({ children: [new PageBreak()] }));
-
-    // 4. FALLBACKS (Ensure no structured data is lost if template sections missed them)
-    const hasRemainingWPs = p.workPackages && p.workPackages.length > renderedWPIndices.size;
-
-    if (!renderedPartnersDetailed || !renderedBudget || !renderedRisks || hasRemainingWPs) {
-      docChildren.push(new Paragraph({ children: [new PageBreak()] }));
-      docChildren.push(createSectionHeader("Annex: Additional Structured Data", 1));
-
-      if (hasRemainingWPs) {
-        const remainingWPs = p.workPackages
-          .map((wp, i) => ({ wp, i }))
-          .filter(item => !renderedWPIndices.has(item.i))
-          .map(item => normalizeWorkPackage(item.wp, item.i));
-
-        if (remainingWPs.length > 0) {
-          docChildren.push(createSectionHeader("Annex: Additional Work Packages", 2));
-          docChildren.push(createWorkPackageTable(remainingWPs));
-          renderedWorkPackages = true;
-          // Mark all as rendered to prevent further fallbacks
-          p.workPackages.forEach((_, i) => renderedWPIndices.add(i));
-        }
+      // Section Guidelines
+      if (section.description) {
+        docChildren.push(new Paragraph({
+          children: [
+            new TextRun({ text: "GUIDELINES: ", bold: true, size: 16, color: "999999", font: FONT }),
+            new TextRun({ text: section.description, italics: true, size: 16, color: "666666", font: FONT }),
+          ],
+          spacing: { before: 100, after: 100 },
+          shading: { fill: "F5F5F5" }
+        }));
       }
 
-      if (p.partners && p.partners.length > 0 && !renderedPartnersDetailed) {
-        docChildren.push(createSectionHeader("Consortium Partners Details", 2));
+      // Narrative Content
+      if (section.content) {
+        docChildren.push(...convertHtmlToParagraphs(section.content, section.title));
+      }
+
+      // Structured Data
+      if (isPartners && p.partners?.length > 0) {
         docChildren.push(createPartnerListTable(p.partners.map(normalizePartner)));
+      } else if (isProfiles && p.partners?.length > 0) {
         p.partners.forEach((pt, i) => {
           const partner = normalizePartner(pt);
           docChildren.push(createSectionHeader(`${i + 1}. ${partner.name}`, 3));
           docChildren.push(createDetailedPartnerProfile(partner));
+          docChildren.push(new Paragraph({ text: "" }));
         });
-        renderedPartnersDetailed = true;
-      }
-      if (p.budget && p.budget.length > 0 && !renderedBudget) {
-        docChildren.push(createSectionHeader("Project Budget", 2));
+      } else if (isWPList && p.workPackages?.length > 0) {
+        // Master Table
+        const allWPs = p.workPackages.map((wp, i) => normalizeWorkPackage(wp, i));
+        docChildren.push(createWorkPackageTable(allWPs));
+      } else if (isWP && p.workPackages && p.workPackages.length > 0 && section.wpIdx !== undefined) {
+        // Individual WP Detail: Narrative is already above, add activities/deliverables here
+        const wp = normalizeWorkPackage(p.workPackages[section.wpIdx], section.wpIdx);
+
+        // Activities
+        if (wp.activities?.length > 0) {
+          docChildren.push(new Paragraph({
+            children: [new TextRun({ text: "Planned Activities:", bold: true, font: FONT, size: 20, color: COLOR_PRIMARY })],
+            spacing: { before: 200, after: 100 }
+          }));
+          wp.activities.forEach(act => {
+            docChildren.push(new Paragraph({
+              children: [new TextRun({ text: `• ${act.name}`, bold: true, font: FONT, size: 18 })],
+              spacing: { before: 100 }
+            }));
+            if (act.description) {
+              docChildren.push(new Paragraph({
+                children: [new TextRun({ text: `  ${act.description}`, font: FONT, size: 16, color: "444444" })],
+                spacing: { after: 100 }
+              }));
+            }
+          });
+        }
+
+        // Deliverables
+        if (wp.deliverables?.length > 0) {
+          docChildren.push(new Paragraph({
+            children: [new TextRun({ text: "Deliverables:", bold: true, font: FONT, size: 20, color: COLOR_PRIMARY })],
+            spacing: { before: 200, after: 100 }
+          }));
+          wp.deliverables.forEach(del => {
+            docChildren.push(new Paragraph({
+              children: [new TextRun({ text: `• ${del}`, font: FONT, size: 18 })],
+              spacing: { before: 40, after: 40 }
+            }));
+          });
+        }
+      } else if (isBudget && p.budget && p.budget.length > 0) {
         docChildren.push(createBudgetTable(p.budget, currency));
-      }
-      if (p.risks && p.risks.length > 0 && !renderedRisks) {
-        docChildren.push(createSectionHeader("Risk Management", 2));
+      } else if (isRisk && p.risks && p.risks.length > 0) {
         docChildren.push(createRiskTable(p.risks));
       }
-    }
 
+      // Optional: spacing after section
+      docChildren.push(new Paragraph({ text: "", spacing: { after: 200 } }));
+    });
+
+    // 4. GENERATE FINAL DOCUMENT
     const doc = new Document({
       styles: { default: { document: { run: { font: FONT, size: BODY_SIZE } } } },
       sections: [{

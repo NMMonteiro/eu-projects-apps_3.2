@@ -111,7 +111,7 @@ async function suggestPartners(callDescription: string, callEligibility: string,
     try {
         console.log('Suggesting partners for call...');
         const ai = getAI();
-        const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const prompt = `You are a consortium-building expert. Analyze this funding call and suggest the best partners from the available list.
         
@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
             console.log(`Analyzing URL: ${url}`);
 
             const ai = getAI();
-            const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
             const fetchContent = async (targetUrl: string) => {
                 try {
@@ -303,7 +303,7 @@ Deno.serve(async (req) => {
         if (customSources && customSources.length > 0) {
             console.log('Checking custom sources...');
             const ai = getAI();
-            const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
             const customPrompt = `User Query: "${query}"
             
@@ -397,7 +397,7 @@ Deno.serve(async (req) => {
         if (opportunities.length === 0) {
             console.log('[FALLBACK] Using Gemini...');
             const ai = getAI();
-            const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+            const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
             const today = new Date().toISOString().split('T')[0];
             const prompt = `Find 5 EU funding calls for "${query}". Today: ${today}. Only deadlines >= ${today}. Return JSON: {"opportunities": [{"title": "", "url": "", "description": "", "source": "Horizon Europe", "status": "Open", "deadline": "YYYY-MM-DD", "budget": "", "eligibility": ""}]}`;
             try {

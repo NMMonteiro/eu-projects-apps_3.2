@@ -5,9 +5,8 @@ export async function aiEditProposal(ai: any, proposal: any, instruction: string
     Options: title, summary, relevance, impact, methods, workPlan, budget, risks, dissemination.
     Return JSON: { "section": "fieldName" }`;
 
-    const detectRes = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { role: 'user', parts: [{ text: detectionPrompt }] }
+    const detectRes = await ai.getGenerativeModel({ model: 'gemini-1.5-flash' }).generateContent({
+        contents: [{ role: 'user', parts: [{ text: detectionPrompt }] }]
     });
     const section = JSON.parse((detectRes.text || "").replace(/```json/g, '').replace(/```/g, '')).section;
 
@@ -17,9 +16,8 @@ export async function aiEditProposal(ai: any, proposal: any, instruction: string
     Generate the NEW content for this section only. Maintain JSON structure/type (string or array).
     Return JSON: { "content": ... }`;
 
-    const editRes = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { role: 'user', parts: [{ text: editPrompt }] }
+    const editRes = await ai.getGenerativeModel({ model: 'gemini-1.5-flash' }).generateContent({
+        contents: [{ role: 'user', parts: [{ text: editPrompt }] }]
     });
     const newContent = JSON.parse((editRes.text || "").replace(/```json/g, '').replace(/```/g, '')).content;
 

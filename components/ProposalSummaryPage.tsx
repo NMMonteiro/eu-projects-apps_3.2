@@ -8,9 +8,11 @@ import {
     ResponsiveSectionContent,
     DynamicWorkPackageSection,
     DynamicBudgetSection,
-    DynamicRiskSection
+    DynamicRiskSection,
+    DynamicPartnerSection
 } from './ProposalSections';
 import { exportToDocx } from '../utils/export-docx';
+import { assembleDocument, DisplaySection } from '../utils/proposal-assembly';
 
 interface ProposalSummaryPageProps {
     proposalId: string | undefined;
@@ -92,139 +94,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
     const coordinator = proposal.partners?.find(p => p.isCoordinator);
 
     // --- ENHANCED ASSEMBLY LOGIC (STRICT ORDERING) ---
-
-    const finalDocument: any[] = [];
-    const renderedKeys = new Set<string>();
-    const renderedWPIndices = new Set<number>();
-
-    // 1. Executive Summary (Always First)
-    const summaryContent = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
-    if (summaryContent) {
-        finalDocument.push({ id: 'summary', title: 'Executive Summary', content: summaryContent, level: 1 });
-        renderedKeys.add('summary');
-        renderedKeys.add('abstract');
-    }
-
-    // 2. Main Narrative (Strict Template Order)
-    if (fundingScheme?.template_json?.sections) {
-        const processTemplate = (sections: any[], level = 1) => {
-            [...sections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
-                const key = ts.key || ts.label.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
-
-                // Content matching
-                let content = dynamicSections[ts.key] || dynamicSections[key];
-
-                // Fuzzy fallback only if specific key fails
-                if (!content) {
-                    const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
-                    const nLabel = normalize(ts.label);
-                    for (const [dk, dv] of Object.entries(dynamicSections)) {
-                        if (normalize(dk) === nLabel) {
-                            content = dv as string;
-                            renderedKeys.add(dk);
-                            break;
-                        }
-                    }
-                } else {
-                    renderedKeys.add(ts.key);
-                    renderedKeys.add(key);
-                }
-
-                // Identify if this is a Work Package section
-                const isWP = ts.type === 'work_package' || ts.label.toLowerCase().includes('work package') || key.includes('workpackage');
-                let wpIdx: number | undefined = undefined;
-
-                if (isWP) {
-                    const match = key.match(/\d+/) || ts.label.match(/\d+/);
-                    if (match) {
-                        wpIdx = parseInt(match[0]) - 1;
-                        renderedWPIndices.add(wpIdx);
-                    } else {
-                        // Generic WP section - don't mark indices here, let missing-WP logic handle it
-                    }
-                }
-
-                finalDocument.push({
-                    id: ts.key || key,
-                    title: ts.label,
-                    content: content,
-                    description: ts.description,
-                    type: ts.type,
-                    level: level,
-                    wpIdx: wpIdx
-                });
-
-                if (ts.subsections && ts.subsections.length > 0) {
-                    processTemplate(ts.subsections, level + 1);
-                }
-            });
-        };
-        processTemplate(fundingScheme.template_json.sections);
-    }
-
-    // 3. Catch-all for AI-generated narrative that didn't match template
-    Object.entries(dynamicSections).forEach(([key, val]) => {
-        if (!renderedKeys.has(key) && val) {
-            const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
-            const nk = normalize(key);
-
-            // Skip common non-narrative keys or things we already did
-            if (nk === 'summary' || nk === 'abstract' || nk === 'budget' || nk === 'partners' || nk === 'risks') return;
-
-            // Critical: Don't let WP leftovers float to the top
-            const wpMatch = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
-            if (wpMatch) {
-                // Keep these for the WP section at the end
-                return;
-            }
-
-            finalDocument.push({
-                id: key,
-                title: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                content: val as string,
-                level: 1
-            });
-            renderedKeys.add(key);
-        }
-    });
-
-    // 4. Custom User Sections
-    (proposal.customSections || []).forEach(s => {
-        finalDocument.push({ id: s.id, title: s.title, content: s.content, level: 1, isCustom: true });
-    });
-
-    // 5. Work Plan / Work Packages (Grouping leftovers to avoid "WP2 on page 1")
-    const hasAnyWPInTemplate = finalDocument.some(s => s.type === 'work_package');
-    if (workPackages?.length && (!hasAnyWPInTemplate || renderedWPIndices.size < workPackages.length)) {
-        // If template didn't explicitly place WPs, or missed some, add them here
-        finalDocument.push({ id: 'work_plan_detail', title: 'Work Plan & Methodology', level: 1, isDivider: true });
-
-        workPackages.forEach((wp: any, idx: number) => {
-            if (!renderedWPIndices.has(idx)) {
-                // Try to find narrative content for this WP specifically
-                const narrative = dynamicSections[`work_package_${idx + 1}`] || dynamicSections[`wp${idx + 1}`] || wp.description;
-                finalDocument.push({
-                    id: `wp_${idx + 1}_auto`,
-                    title: wp.name || `Work Package ${idx + 1}`,
-                    content: narrative,
-                    type: 'work_package',
-                    level: 2,
-                    wpIdx: idx
-                });
-            }
-        });
-    }
-
-    // 6. Final Financials & Risks
-    const hasBudget = finalDocument.some(s => s.type === 'budget' || s.title?.toLowerCase().includes('budget'));
-    if (!hasBudget && budget.length > 0) {
-        finalDocument.push({ id: 'auto_budget', title: 'Budget & Cost Estimation', level: 1, type: 'budget' });
-    }
-
-    const hasRisks = finalDocument.some(s => s.type === 'risk' || s.title?.toLowerCase().includes('risk'));
-    if (!hasRisks && risks.length > 0) {
-        finalDocument.push({ id: 'auto_risks', title: 'Risk Management & Mitigation', level: 1, type: 'risk' });
-    }
+    const finalDocument = assembleDocument(proposal);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
@@ -294,40 +164,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                     </div>
                 </div>
 
-                {/* Consortium Table */}
-                <div className="mb-20 page-break-inside-avoid">
-                    <h2 className="text-2xl font-bold mb-8 text-slate-900 flex items-center gap-3">
-                        Participating Organisations
-                    </h2>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                        <table className="w-full text-left border-collapse text-sm">
-                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
-                                <tr>
-                                    <th className="py-4 px-6">Role</th>
-                                    <th className="py-4 px-6">Organisation</th>
-                                    <th className="py-4 px-6">Country</th>
-                                    <th className="py-4 px-6">Type</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {proposal.partners?.map((p, idx) => (
-                                    <tr key={idx}>
-                                        <td className="py-4 px-6">
-                                            {p.isCoordinator ? (
-                                                <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-md text-[10px] font-bold">Coordinator</span>
-                                            ) : (
-                                                <span className="text-slate-400 font-medium">Partner</span>
-                                            )}
-                                        </td>
-                                        <td className="py-4 px-6 font-semibold text-slate-800">{p.name}</td>
-                                        <td className="py-4 px-6 text-slate-600">{p.country || "—"}</td>
-                                        <td className="py-4 px-6 text-slate-500 italic">{p.organizationType || "SME"}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+
 
                 {/* Narrative Sections */}
                 <div className="space-y-20">
@@ -355,6 +192,35 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                     {section.content && <ResponsiveSectionContent content={section.content} />}
 
                                     <div className="mt-8 not-prose">
+                                        {section.type === 'partners' && (
+                                            <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                                <table className="w-full text-left border-collapse text-xs">
+                                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                                                        <tr>
+                                                            <th className="py-3 px-4">Role</th>
+                                                            <th className="py-3 px-4">Organisation</th>
+                                                            <th className="py-3 px-4">Country</th>
+                                                            <th className="py-3 px-4">Type</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {proposal.partners?.map((p, pIdx) => (
+                                                            <tr key={pIdx}>
+                                                                <td className="py-3 px-4">
+                                                                    <span className={p.isCoordinator ? "bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] font-bold" : "text-slate-400"}>
+                                                                        {p.isCoordinator ? 'Coordinator' : 'Partner'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-3 px-4 font-semibold text-slate-800">{p.name}</td>
+                                                                <td className="py-3 px-4 text-slate-600">{p.country}</td>
+                                                                <td className="py-3 px-4 text-slate-400 italic">{p.organizationType || 'SME'}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                        {section.type === 'partner_profiles' && <DynamicPartnerSection partners={proposal.partners || []} />}
                                         {isWP && <DynamicWorkPackageSection workPackages={workPackages} limitToIndex={section.wpIdx} currency={currency} />}
                                         {isBudget && <DynamicBudgetSection budget={budget} currency={currency} />}
                                         {isRisk && <DynamicRiskSection risks={risks} />}
