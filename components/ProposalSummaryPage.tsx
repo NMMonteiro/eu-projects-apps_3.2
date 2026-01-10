@@ -170,11 +170,14 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                 <div className="space-y-20">
                     {finalDocument.map((section, idx) => {
                         const isWP = section.type === 'work_package' || (section.wpIdx !== undefined);
+                        const isWPList = section.type === 'wp_list';
                         const isBudget = section.type === 'budget';
                         const isRisk = section.type === 'risk';
+                        const isPartners = section.type === 'partners';
+                        const isProfiles = section.type === 'partner_profiles';
 
                         // Don't render empty sections unless they are structured containers
-                        if (!section.content && !isWP && !isBudget && !isRisk) return null;
+                        if (!section.content && !isWP && !isWPList && !isBudget && !isRisk && !isPartners && !isProfiles) return null;
 
                         return (
                             <div key={section.id || idx} className="page-break-inside-avoid section-entry">
@@ -220,8 +223,8 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                                 </table>
                                             </div>
                                         )}
-                                        {section.type === 'partner_profiles' && <DynamicPartnerSection partners={proposal.partners || []} />}
-                                        {isWP && <DynamicWorkPackageSection workPackages={workPackages} limitToIndex={section.wpIdx} currency={currency} />}
+                                        {isProfiles && <DynamicPartnerSection partners={proposal.partners || []} />}
+                                        {(isWP || isWPList) && <DynamicWorkPackageSection workPackages={workPackages} limitToIndex={section.wpIdx} currency={currency} />}
                                         {isBudget && <DynamicBudgetSection budget={budget} currency={currency} />}
                                         {isRisk && <DynamicRiskSection risks={risks} />}
                                     </div>

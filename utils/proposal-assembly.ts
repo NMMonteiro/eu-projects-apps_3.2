@@ -148,7 +148,18 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
     // 5. Work Plan / Work Packages (Grouping leftovers to avoid "WP2 on page 1")
     const hasAnyWPInTemplate = finalDocument.some(s => s.type === 'work_package' || s.type === 'wp_list');
-    if (workPackages?.length && (!hasAnyWPInTemplate || renderedWPIndices.size < workPackages.length)) {
+
+    // Collect ALL WP indices from both structural data AND dynamic sections
+    const allWPIndices = new Set<number>(workPackages.map((_, i) => i));
+    Object.entries(dynamicSections).forEach(([key, val]) => {
+        const nk = key.toLowerCase().replace(/[\W_]/g, '');
+        const match = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
+        if (match && val) {
+            allWPIndices.add(parseInt(match[1]) - 1);
+        }
+    });
+
+    if (allWPIndices.size > 0 && (!hasAnyWPInTemplate || renderedWPIndices.size < allWPIndices.size)) {
 
         if (!wpOverviewInserted) {
             finalDocument.push({ id: 'work_plan_detail', title: 'Work Plan & Methodology', level: 1, isDivider: true });
@@ -156,17 +167,22 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             wpOverviewInserted = true;
         }
 
-        workPackages.forEach((wp: any, idx: number) => {
+        Array.from(allWPIndices).sort((a, b) => a - b).forEach((idx: number) => {
             if (!renderedWPIndices.has(idx)) {
-                const narrative = dynamicSections[`work_package_${idx + 1}`] || dynamicSections[`wp${idx + 1}`] || wp.description;
+                const wp = workPackages[idx] || { name: `Work Package ${idx + 1}`, description: '' };
+                const narrative = dynamicSections[`work_package_${idx + 1}`] ||
+                    dynamicSections[`wp${idx + 1}`] ||
+                    dynamicSections[`workpackage${idx + 1}`] ||
+                    wp.description;
                 finalDocument.push({
                     id: `wp_${idx + 1}_auto`,
-                    title: wp.name || `Work Package ${idx + 1}`,
+                    title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
                     content: narrative,
                     type: 'work_package',
                     level: 2,
                     wpIdx: idx
                 });
+                renderedWPIndices.add(idx);
             }
         });
     }
