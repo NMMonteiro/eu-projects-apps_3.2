@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Printer, Download, FileText, CheckCircle2, Building2, Globe, Clock, EuroIcon } from 'lucide-react';
+import { ArrowLeft, Printer, Download, FileText, Building2, Clock, EuroIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { serverUrl, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
 import { FullProposal } from '../types/proposal';
@@ -9,8 +8,7 @@ import {
     ResponsiveSectionContent,
     DynamicWorkPackageSection,
     DynamicBudgetSection,
-    DynamicRiskSection,
-    DynamicPartnerSection
+    DynamicRiskSection
 } from './ProposalSections';
 import { exportToDocx } from '../utils/export-docx';
 
@@ -89,103 +87,94 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
     const totalBudget = (proposal.budget || []).reduce((sum, item) => sum + (item.cost || 0), 0);
     const coordinator = proposal.partners?.find(p => p.isCoordinator);
 
-    let baseSections: any[] = [];
-    const renderedWPIndices = new Set<number>();
+    // 1. Gather all possible narrative components EXHAUSTIVELY
+    const renderedKeys = new Set<string>();
+    const structuredSections: any[] = [];
 
+    // 2. Process the Funding Scheme Template first (High Priority mapping)
     if (fundingScheme?.template_json?.sections) {
-        const processTemplateSections = (templateSections: any[], level = 1): any[] => {
-            let flattened: any[] = [];
+        const process = (templateSections: any[], level = 1) => {
             [...templateSections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
-                const lowerKey = ts.key?.toLowerCase() || "";
-                const lowerLabel = ts.label?.toLowerCase() || "";
-                const isWP = lowerKey.includes('work_package') || lowerLabel.includes('work package');
+                const key = ts.key;
+                renderedKeys.add(key);
 
-                if (isWP) {
-                    const match = lowerKey.match(/work_package_(\d+)/i) || lowerLabel.match(/work package (\d+)/i);
-                    if (match) {
-                        renderedWPIndices.add(parseInt(match[1]) - 1);
-                    }
+                // Find content: dynamicSections > top-level fields
+                let content = dynamicSections[key];
+                if (!content || (typeof content === 'string' && content.length < 5)) {
+                    if ((proposal as any)[key]) content = (proposal as any)[key];
+                    else if (key === 'methodology' && (proposal as any).methods) content = (proposal as any).methods;
+                    else if (key === 'summary' && proposal.summary) content = proposal.summary;
                 }
 
-                // Fallback content logic
-                let content = dynamicSections[ts.key];
-                if (!content) {
-                    const key = ts.key as string;
-                    if (key === 'summary') content = proposal.summary;
-                    else if (key === 'introduction') content = proposal.introduction;
-                    else if (key === 'relevance') content = proposal.relevance;
-                    else if (key === 'objectives') content = proposal.objectives;
-                    else if (key === 'methodology' || key === 'methods') content = proposal.methodology || proposal.methods;
-                    else if (key === 'workPlan') content = proposal.workPlan;
-                    else if (key === 'expectedResults') content = proposal.expectedResults;
-                    else if (key === 'impact') content = proposal.impact;
-                    else if (key === 'innovation') content = proposal.innovation;
-                    else if (key === 'sustainability') content = proposal.sustainability;
-                    else if (key === 'consortium') content = proposal.consortium;
-                    else if (key === 'riskManagement') content = proposal.riskManagement;
-                    else if (key === 'dissemination') content = proposal.dissemination;
-                }
-
-                flattened.push({
-                    id: ts.key,
-                    title: ts.label.replace(/^undefined\s*/gi, '').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                structuredSections.push({
+                    id: key,
+                    title: ts.label,
                     content: content,
-                    description: ts.description,
+                    description: ts.description, // These are the verbatim INSTRUCTIONS from the template
                     type: ts.type,
                     level: level
                 });
 
                 if (ts.subsections && ts.subsections.length > 0) {
-                    flattened = [...flattened, ...processTemplateSections(ts.subsections, level + 1)];
+                    process(ts.subsections, level + 1);
                 }
             });
-            return flattened;
         };
-        baseSections = processTemplateSections(fundingScheme.template_json.sections);
-
-        // Add missing Work Packages
-        if (proposal.workPackages && proposal.workPackages.length > 0) {
-            proposal.workPackages.forEach((wp, idx) => {
-                if (!renderedWPIndices.has(idx)) {
-                    baseSections.push({
-                        id: `work_package_${idx + 1}`,
-                        title: wp.name || `Work Package ${idx + 1}`,
-                        content: wp.description,
-                        type: 'work_package',
-                        level: 2
-                    });
-                }
-            });
-        }
-    } else if (Object.keys(dynamicSections).length > 0) {
-        baseSections = Object.entries(dynamicSections).map(([key, content], idx) => ({
-            id: key,
-            title: `${idx + 1}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
-            content: content as string
-        }));
-    } else {
-        baseSections = [
-            { id: 'summary', title: 'Executive Summary', content: proposal.summary },
-            { id: 'introduction', title: 'Introduction', content: proposal.introduction },
-            { id: 'relevance', title: 'Relevance', content: proposal.relevance },
-            { id: 'objectives', title: 'Objectives', content: proposal.objectives },
-            { id: 'methodology', title: 'Methodology', content: proposal.methodology || proposal.methods },
-            { id: 'impact', title: 'Impact', content: proposal.impact },
-            { id: 'consortium', title: 'Consortium', content: proposal.consortium },
-            { id: 'riskManagement', title: 'Risk Management', content: proposal.riskManagement },
-            { id: 'dissemination', title: 'Dissemination & Communication', content: proposal.dissemination },
-        ];
+        process(fundingScheme.template_json.sections);
     }
 
-    // Add custom sections
-    const customSections = (proposal.customSections || []).map((section: any, idx: number) => ({
-        id: section.id || `custom-${idx}`,
-        title: `${baseSections.length + idx + 1}. ${section.title}`,
-        content: section.content,
+    // 3. Catch-all for Dynamic Sections generated by AI but not in Template Map
+    Object.entries(dynamicSections).forEach(([key, val]) => {
+        if (!renderedKeys.has(key) && val) {
+            structuredSections.push({
+                id: key,
+                title: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                content: val as string,
+                level: 1
+            });
+            renderedKeys.add(key);
+        }
+    });
+
+    // 4. Custom Sections added by user in the UI
+    const customSections = (proposal.customSections || []).map((s: any) => ({
+        id: s.id,
+        title: s.title,
+        content: s.content,
+        level: 1,
         isCustom: true
     }));
 
-    const sections = [...baseSections, ...customSections];
+    // 5. Final Assembly: Ensure SUMMARY is at the top if it wasn't hit by template
+    let finalDocument: any[] = [];
+    if (!renderedKeys.has('summary') && proposal.summary) {
+        finalDocument.push({ id: 'summary', title: 'Project Summary / Abstract', content: proposal.summary, level: 1 });
+    }
+    finalDocument = [...finalDocument, ...structuredSections, ...customSections];
+
+    // Mark Work Packages rendered
+    const wpIndicesRendered = new Set<number>();
+    finalDocument.forEach(s => {
+        if (s.id?.toLowerCase().includes('work_package')) {
+            const match = s.id.match(/work_package_(\d+)/i) || (s.title || "").toLowerCase().match(/work package (\d+)/i);
+            if (match) wpIndicesRendered.add(parseInt(match[1]) - 1);
+        }
+    });
+
+    // Add any missing Work Packages automatically
+    if (proposal.workPackages?.length) {
+        proposal.workPackages.forEach((wp, idx) => {
+            if (!wpIndicesRendered.has(idx)) {
+                finalDocument.push({
+                    id: `work_package_${idx + 1}`,
+                    title: wp.name || `Work Package ${idx + 1}`,
+                    content: wp.description,
+                    type: 'work_package',
+                    level: 2
+                });
+            }
+        });
+    }
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
@@ -255,20 +244,10 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                     </div>
                 </div>
 
-                {/* 2. PROJECT SUMMARY */}
+                {/* 2. CONSORTIUM TABLE */}
                 <div className="mb-20 page-break-inside-avoid">
                     <h2 className="text-2xl font-bold mb-8 text-slate-900 flex items-center gap-3">
-                        1. Project Summary
-                    </h2>
-                    <div className="bg-slate-50 p-8 rounded-2xl text-slate-700 italic border-l-4 border-primary leading-relaxed">
-                        {proposal.summary}
-                    </div>
-                </div>
-
-                {/* 3. CONSORTIUM TABLE */}
-                <div className="mb-20 page-break-inside-avoid">
-                    <h2 className="text-2xl font-bold mb-8 text-slate-900 flex items-center gap-3">
-                        2. Participating Organisations
+                        Participating Organisations
                     </h2>
                     <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-left border-collapse text-sm">
@@ -300,47 +279,52 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                     </div>
                 </div>
 
-                {/* 4. MAIN NARRATIVE SECTIONS */}
-                <div className="space-y-24">
-                    {sections.map((section, idx) => {
+                {/* 3. ALL AI-GENERATED NARRATIVE SECTIONS */}
+                <div className="space-y-20">
+                    {finalDocument.map((section, idx) => {
                         const lowerId = (section.id || "").toLowerCase();
                         const lowerTitle = (section.title || "").toLowerCase();
 
                         const isWP = lowerId.includes('work_package') || lowerTitle.includes('work package');
                         const isBudget = lowerId.includes('budget') || lowerTitle.includes('budget');
                         const isRisk = lowerId.includes('risk') || lowerTitle.includes('risk');
-                        const isPartner = lowerId.includes('partner') || lowerTitle.includes('partner') || lowerId.includes('consortium') || lowerTitle.includes('consortium');
 
-                        // Skip partners as they are handled in the table above unless it's a dedicated narrative section with content
-                        if (isPartner && !section.content) return null;
-
+                        // Don't render if it's completely empty AND not a structured data placeholder
                         if (!section.content && !isWP && !isBudget && !isRisk) return null;
 
                         return (
                             <div key={section.id || idx} className="page-break-inside-avoid section-entry">
-                                <h2 className={`${section.level === 1 ? 'text-2xl border-l-4 border-primary pl-4' : 'text-xl text-slate-700 pl-4 border-l-2 border-slate-200'} font-bold mb-10 text-slate-900 tracking-tight`}>
+                                <h2 className={`${section.level === 1 ? 'text-2xl border-l-4 border-primary pl-4' : 'text-xl text-slate-700 pl-4 border-l-2 border-slate-200'} font-bold mb-6 text-slate-900 tracking-tight`}>
                                     {section.title}
                                 </h2>
 
-                                <div className="prose prose-slate max-w-none text-slate-700 leading-[1.7] prose-headings:text-slate-900 prose-strong:text-slate-900 prose-p:mb-6">
-                                    {section.content && (
+                                {section.description && (
+                                    <div className="mb-6 px-4 py-2 bg-slate-50 border-l border-slate-200 text-[11px] text-slate-400 italic font-medium">
+                                        {section.description}
+                                    </div>
+                                )}
+
+                                <div className="prose prose-slate max-w-none text-slate-700 leading-[1.8] prose-headings:text-slate-900 prose-strong:text-slate-900 prose-p:mb-6 px-4">
+                                    {section.content ? (
                                         <ResponsiveSectionContent content={section.content} />
+                                    ) : (
+                                        <p className="text-slate-300 italic text-sm">No narrative content generated for this section.</p>
                                     )}
 
-                                    {/* Structured data rendering */}
-                                    <div className="mt-12 not-prose">
+                                    {/* Structured data rendering embedded within the narrative flow */}
+                                    <div className="mt-8 not-prose">
                                         {isWP && (() => {
                                             const match = section.id.match(/work_package_(\d+)/i) || section.title.toLowerCase().match(/work package (\d+)/i);
                                             const wpIdx = match ? parseInt(match[1]) - 1 : undefined;
                                             return <DynamicWorkPackageSection workPackages={proposal.workPackages} limitToIndex={wpIdx} currency={currency} />;
                                         })()}
                                         {isBudget && (
-                                            <div className="bg-slate-50/50 p-8 rounded-2xl border border-slate-100 shadow-sm">
+                                            <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-100 shadow-sm">
                                                 <DynamicBudgetSection budget={proposal.budget} currency={currency} />
                                             </div>
                                         )}
                                         {isRisk && (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <DynamicRiskSection risks={proposal.risks || []} />
                                             </div>
                                         )}
@@ -351,28 +335,13 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                     })}
                 </div>
 
-                {/* 5. SIGNATURE BLOCK (Placeholder for professionalism) */}
-                <div className="mt-40 pt-16 border-t border-slate-100 page-break-inside-avoid">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-12 text-center">Authentication & Submission</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
-                        <div className="space-y-8">
-                            <div className="h-px bg-slate-200 w-full" />
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Legal Representative Signature</p>
-                        </div>
-                        <div className="space-y-8">
-                            <div className="h-px bg-slate-200 w-full" />
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date of Submission</p>
-                        </div>
-                    </div>
-                </div>
-
                 {/* Footer */}
-                <div className="mt-32 pt-12 border-t border-slate-50 flex justify-between items-center text-slate-400 text-[9px] font-bold tracking-[0.1em] uppercase">
+                <div className="mt-40 pt-10 border-t border-slate-100 flex justify-between items-center text-slate-400 text-[9px] font-bold tracking-[0.1em] uppercase">
                     <div className="flex items-center gap-4">
                         <Building2 className="w-3 h-3" />
                         <span>Project ID: {proposal.id}</span>
                     </div>
-                    <span>© {new Date().getFullYear()} EU PROJECTS GENERATOR</span>
+                    <span>© {new Date().getFullYear()} EU PROJECTS STUDIO</span>
                 </div>
             </div>
 
@@ -397,7 +366,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
 
                 .prose p { margin-bottom: 1.5rem; }
                 .prose h3 { margin-top: 2rem; margin-bottom: 1rem; color: #1e293b; font-weight: 700; }
-                .section-entry { border-bottom: 1px solid #f1f5f9; padding-bottom: 4rem; margin-bottom: 4rem; }
+                .section-entry { border-bottom: 1px solid #f8fafc; padding-bottom: 4rem; margin-bottom: 4rem; }
                 .section-entry:last-child { border-bottom: none; }
             `}} />
         </div>
