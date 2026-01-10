@@ -132,7 +132,7 @@ export function buildProposalPrompt(
   idea: any,
   summary: string,
   constraints: any,
-  partners: any[] = [],
+  partners: any = [],
   userPrompt?: string,
   fundingScheme?: any
 ): string {
@@ -173,17 +173,10 @@ export function buildProposalPrompt(
       { key: 'impact', label: 'Impact', description: 'Expected change.' }
     ];
 
-  // No forced WP count logic - AI will decide based on the project idea and partners
-
-  const partnerInfo = partners.length > 0
-    ? `\n\nCONSORTIUM PARTNERS (LOADED FROM DATABASE - YOU MUST USE ALL ${partners.length} OF THEM):\n${partners.map((p, i) => `- ${p.name}${p.acronym ? ` (${p.acronym})` : ''} - ${p.country || 'Country'}${p.isCoordinator ? ' [LEAD COORDINATOR]' : ''}\n  - Role: ${p.role || (p.isCoordinator ? 'Project Coordinator' : 'Partner')}\n  - Profile: ${p.description || 'No description'}\n  - Expertise: ${p.experience || ''}`).join('\n')}`
-    : '';
-
   const userRequirements = userPrompt
     ? `\n\n🎯 MANDATORY USER REQUIREMENTS - HIGHEST PRIORITY:\n${userPrompt}\n============================================================`
     : '';
 
-  // Robust budget extraction: handle dot as thousands separator (250.000) or comma (250,000)
   // Robust budget extraction
   const extractNumericBudget = (text: string): number | null => {
     if (!text) return null;
@@ -209,14 +202,14 @@ export function buildProposalPrompt(
   const personnelBudget = Math.floor(budgetNum * 0.6);
   const operationalBudget = Math.floor(budgetNum * 0.4);
 
-  const partnerDictionary = partners.map((p, i) => `[PARTNER ${i + 1}]: "${p.name}" 
+  const partnerDictionary = partners.map((p: any, i: number) => `[PARTNER ${i + 1}]: "${p.name}" 
    - Acronym: ${p.acronym || 'N/A'}
    - Role: ${p.isCoordinator ? 'LEAD COORDINATOR (APPLICANT ORGANISATION)' : 'Partner'}
    - Country: ${p.country || 'N/A'}
    - Profile: ${p.description || 'No profile provided.'}
    - Expertise: ${p.experience || 'No expertise provided.'}`).join('\n\n');
 
-  const sectionInstructions = allSections.map((s, i) => {
+  const sectionInstructions = allSections.map((s) => {
     return `SECTION: ${s.label}
     KEY: "${s.key}"
     AI INSTRUCTION: ${s.aiPrompt || 'Write a technical narrative addressing this section.'}`;
@@ -228,12 +221,13 @@ PROJECT IDEA:
 Title: ${idea.title}
 Summary: ${idea.description}
 
-CONSORTIUM (MANDATORY - USE ALL ${partners.length} PARTNERS):
+CONSORTIUM PARTNERS (LOADED FROM DATABASE - YOU MUST USE ALL ${partners.length} OF THEM):
 ${partnerDictionary}
 
 BUDGET CONSTRAINTS:
 - Total: ${finalBudgetStr} (${budgetNum} EUR)
 - Rule: USE ONLY LARGE INTEGERS for "cost", "unitCost", and "amount".
+- STRICT TOTAL: The sum of all items in the "budget" array MUST equal EXACTLY ${budgetNum} EUR.
 
 STRICT OUTPUT CONTRACT:
 1. **PARTNERS MAPPING**: 
@@ -246,7 +240,8 @@ STRICT OUTPUT CONTRACT:
    - You MUST fill content for EVERY key listed in the "STRUCTURE TO FOLLOW" section below.
    - If you see a key like "applicant_organisation", provide a technical description of "${partners[0]?.name}".
    - If you see a key like "participating_organisations", describe the synergy between ALL partners.
-4. **NO HALLUCINATIONS**: Do NOT invent partners. Do NOT use names like "Science Box" or "ILT".
+4. **EXACT BUDGET**: The total budget MUST be exactly ${budgetNum} EUR. Distribute it realistically among Personnel, Equipment, and Travel.
+5. **NO HALLUCINATIONS**: Do NOT invent partners. Use ONLY the ${partners.length} organizations provided.
 
 STRUCTURE TO FOLLOW (MANDATORY KEYS):
 ${sectionInstructions}
@@ -255,7 +250,7 @@ STRICT JSON OUTPUT FORMAT (FOLLOW EXACTLY):
 {
   "title": "${idea.title}",
   "partners": [
-    ${partners.map(p => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Lead Coordinator' : 'Partner'}", "country": "${p.country || ''}", "isCoordinator": ${p.isCoordinator || false}, "description": "Professional technical profile based on expertise." }`).join(',\n    ')}
+    ${partners.map((p: any) => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Lead Coordinator' : 'Partner'}", "country": "${p.country || ''}", "isCoordinator": ${p.isCoordinator || false}, "description": "Professional technical profile based on expertise." }`).join(',\n    ')}
   ],
   "workPackages": [
     {
@@ -267,11 +262,7 @@ STRICT JSON OUTPUT FORMAT (FOLLOW EXACTLY):
         { "name": "Quality Assurance", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
       ],
       "deliverables": ["Management Plan", "Progress Report"]
-    },
-    { "name": "WP2: ...", "description": "...", "duration": "M1-M6", "activities": [...], "deliverables": [...] },
-    { "name": "WP3: ...", "description": "...", "duration": "M7-M12", "activities": [...], "deliverables": [...] },
-    { "name": "WP4: ...", "description": "...", "duration": "M13-M18", "activities": [...], "deliverables": [...] },
-    { "name": "WP5: ...", "description": "...", "duration": "M19-M24", "activities": [...], "deliverables": [...] }
+    }
   ],
   "budget": [
     {
@@ -279,24 +270,16 @@ STRICT JSON OUTPUT FORMAT (FOLLOW EXACTLY):
       "cost": ${personnelBudget},
       "description": "Staff costs for all partners.",
       "breakdown": [{ "subItem": "Researchers", "quantity": 1, "unitCost": ${personnelBudget}, "total": ${personnelBudget} }],
-      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
+      "partnerAllocations": [${partners.map((p: any) => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
     }
   ],
   "risks": [{ "risk": "Technical delay", "likelihood": "Low", "impact": "High", "mitigation": "Proper planning..." }],
   "summary": "Full project summary (HTML)...",
   "dynamicSections": {
     "key_from_structure_above": "HTML technical narrative...",
-    "work_package_1": "Narrative for WP1...",
-    "work_package_2": "Narrative for WP2...",
-    "work_package_3": "Narrative for WP3...",
-    "work_package_4": "Narrative for WP4...",
-    "work_package_5": "Narrative for WP5..."
+    "work_package_1": "Narrative for WP1..."
   }
 }
 
 Return ONLY valid JSON.`;
 }
-
-
-
-

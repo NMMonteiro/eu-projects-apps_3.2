@@ -58,6 +58,72 @@ const getFileManager = () => {
     return new GoogleAIFileManager(apiKey);
 };
 
+// Helper to sync proposal to real Supabase table for relational integrity
+const saveToSupabase = async (proposal: any) => {
+    try {
+        const supabase = getSupabaseClient();
+
+        // Map JS camelCase to Postgres snake_case
+        const dbProposal: any = {
+            title: proposal.title || 'Untitled Proposal',
+            summary: proposal.summary,
+            relevance: proposal.relevance,
+            methods: proposal.methods || proposal.methodology,
+            impact: proposal.impact,
+            introduction: proposal.introduction,
+            objectives: proposal.objectives,
+            methodology: proposal.methodology || proposal.methods,
+            expected_results: proposal.expected_results || proposal.expectedResults,
+            innovation: proposal.innovation,
+            sustainability: proposal.sustainability,
+            consortium: proposal.consortium || proposal.consortium_description,
+            work_plan: proposal.workPlan || proposal.work_plan,
+            risk_management: proposal.riskManagement || proposal.risk_management,
+            dissemination: proposal.dissemination,
+            partners: proposal.partners || [],
+            work_packages: proposal.workPackages || [],
+            milestones: proposal.milestones || [],
+            risks: proposal.risks || [],
+            budget: proposal.budget || [],
+            timeline: proposal.timeline || [],
+            technical_overview: proposal.technicalOverview || proposal.technical_overview,
+            project_url: proposal.projectUrl || proposal.project_url,
+            selected_idea: proposal.selectedIdea,
+            settings: proposal.settings || {},
+            generated_at: proposal.generatedAt,
+            saved_at: proposal.savedAt || new Date().toISOString(),
+            updated_at: proposal.updatedAt || new Date().toISOString(),
+            funding_scheme_id: proposal.funding_scheme_id,
+            dynamic_sections: proposal.dynamic_sections || proposal.dynamicSections
+        };
+
+        // If ID is not a UUID, let Supabase generate one or use the string if it's compatible
+        // But for consistency with KV, we'll try to use a UUID if possible
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposal.id);
+
+        if (isUuid) {
+            dbProposal.id = proposal.id;
+        }
+
+        const { data, error } = await supabase
+            .from('proposals')
+            .upsert(dbProposal, { onConflict: 'id' })
+            .select()
+            .single();
+
+        if (error) {
+            console.error('Failed to sync to Supabase proposals table:', error.message);
+            return null;
+        }
+
+        console.log('Successfully synced proposal to Supabase table:', data.id);
+        return data.id;
+    } catch (e) {
+        console.error('Error in saveToSupabase:', e);
+        return null;
+    }
+};
+
 const ensureBucket = async (bucketName: string) => {
     const supabase = getSupabaseClient();
 
@@ -281,62 +347,67 @@ Return ONLY valid JSON, no other text.`;
             const { idea, summary, constraints, selectedPartners = [], userPrompt, fundingSchemeId } = await req.json();
 
             // Load partner details if provided
-            const partners = [];
+            const partnersRaw: any[] = [];
+            const partners: any[] = [];
             const filteredPartners = selectedPartners.filter(Boolean);
             console.log(`🔍 Loading ${filteredPartners.length} partners from DB: ${filteredPartners.join(', ')}`);
 
             if (filteredPartners.length > 0) {
                 const supabase = getSupabaseClient();
-                const { data: dbPartners, error: partnerError } = await supabase
-                    .from('partners')
-                    .select('*')
-                    .in('id', filteredPartners);
+                // Only query UUIDs from Supabase to avoid "invalid input syntax for type uuid" error
+                const uuidPartners = filteredPartners.filter((id: string) =>
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+                );
 
-                if (partnerError) console.error('❌ Error fetching partners:', partnerError);
+                if (uuidPartners.length > 0) {
+                    const { data: dbPartners, error: partnerError } = await supabase
+                        .from('partners')
+                        .select('*')
+                        .in('id', uuidPartners);
 
-                if (dbPartners && dbPartners.length > 0) {
-                    console.log(`✅ Found ${dbPartners.length} partners in DB.`);
+                    if (partnerError) console.error('❌ Error fetching partners:', partnerError);
 
-                    // Map to camelCase for the prompt builder
-                    partners.push(...dbPartners.map(p => ({
-                        id: p.id,
-                        name: p.name,
-                        legalNameNational: p.legal_name_national || '',
-                        acronym: p.acronym,
-                        country: p.country,
-                        description: p.description,
-                        experience: p.experience,
-                        staffSkills: p.staff_skills,
-                        relevantProjects: p.relevant_projects,
-                        organisationId: p.organisation_id || p.pic || '',
-                        pic: p.pic || '',
-                        vatNumber: p.vat_number || '',
-                        businessId: p.business_id || '',
-                        organizationType: p.organization_type || '',
-                        isPublicBody: p.is_public_body,
-                        isNonProfit: p.is_non_profit,
-                        legalAddress: p.legal_address || '',
-                        city: p.city || '',
-                        postcode: p.postcode || '',
-                        region: p.region || '',
-                        website: p.website || '',
-                        contactEmail: p.contact_email || '',
-                        department: p.department || '',
-                        legalRepName: p.legal_rep_name || '',
-                        legalRepPosition: p.legal_rep_position || '',
-                        legalRepEmail: p.legal_rep_email || '',
-                        legalRepPhone: p.legal_rep_phone || '',
-                        contactPersonName: p.contact_person_name || '',
-                        contactPersonPosition: p.contact_person_position || '',
-                        contactPersonEmail: p.contact_person_email || '',
-                        contactPersonPhone: p.contact_person_phone || '',
-                        contactPersonRole: p.contact_person_role || '',
-                        role: p.role || '',
-                        isCoordinator: p.id === filteredPartners[0] // First one selected is always coordinator
-                    })));
+                    if (dbPartners && dbPartners.length > 0) {
+                        console.log(`✅ Found ${dbPartners.length} partners in DB.`);
 
-                    // Ensure the order matches the selection
-                    partners.sort((a, b) => filteredPartners.indexOf(a.id) - filteredPartners.indexOf(b.id));
+                        // Map to camelCase for the prompt builder
+                        partners.push(...dbPartners.map(p => ({
+                            id: p.id,
+                            name: p.name,
+                            legalNameNational: p.legal_name_national || '',
+                            acronym: p.acronym,
+                            country: p.country,
+                            description: p.description,
+                            experience: p.experience,
+                            staffSkills: p.staff_skills,
+                            relevantProjects: p.relevant_projects,
+                            organisationId: p.organisation_id || p.pic || '',
+                            pic: p.pic || '',
+                            vatNumber: p.vat_number || '',
+                            businessId: p.business_id || '',
+                            organizationType: p.organization_type || '',
+                            isPublicBody: p.is_public_body,
+                            isNonProfit: p.is_non_profit,
+                            legalAddress: p.legal_address || '',
+                            city: p.city || '',
+                            postcode: p.postcode || '',
+                            region: p.region || '',
+                            website: p.website || '',
+                            contactEmail: p.contact_email || '',
+                            department: p.department || '',
+                            legalRepName: p.legal_rep_name || '',
+                            legalRepPosition: p.legal_rep_position || '',
+                            legalRepEmail: p.legal_rep_email || '',
+                            legalRepPhone: p.legal_rep_phone || '',
+                            contactPersonName: p.contact_person_name || '',
+                            contactPersonPosition: p.contact_person_position || '',
+                            contactPersonEmail: p.contact_person_email || '',
+                            contactPersonPhone: p.contact_person_phone || '',
+                            contactPersonRole: p.contact_person_role || '',
+                            role: p.role || '',
+                            isCoordinator: p.id === filteredPartners[0] // First one selected is always coordinator
+                        })));
+                    }
                 }
 
                 // Fallback to KV if any missing (for transition)
@@ -349,6 +420,9 @@ Return ONLY valid JSON, no other text.`;
                         }
                     }
                 }
+
+                // Ensure the order matches the selection
+                partners.sort((a, b) => filteredPartners.indexOf(a.id) - filteredPartners.indexOf(b.id));
             }
 
             if (partners.length === 0) {
@@ -499,7 +573,28 @@ Return ONLY valid JSON, no other text.`;
             if (constraints.duration) customParams.push({ key: 'Duration', value: constraints.duration });
             if (constraints.partners) customParams.push({ key: 'Partner Requirements', value: constraints.partners });
 
-            proposal.partners = partners;
+            // Merge AI-generated partner info (roles/desc) with portal metadata (OID/VAT/etc)
+            if (proposal.partners && Array.isArray(proposal.partners)) {
+                proposal.partners = partners.map(portalP => {
+                    const aiP = (proposal.partners as any[]).find(p =>
+                        p.name?.toLowerCase().includes(portalP.name.toLowerCase()) ||
+                        portalP.name.toLowerCase().includes(p.name?.toLowerCase())
+                    );
+                    return {
+                        ...portalP,
+                        role: aiP?.role || portalP.role || 'Partner',
+                        description: aiP?.description || portalP.description
+                    };
+                });
+            } else {
+                proposal.partners = partners;
+            }
+
+            console.log(`Final proposal has ${proposal.partners?.length} partners and budget items: ${proposal.budget?.length}`);
+            if (proposal.budget) {
+                const total = proposal.budget.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
+                console.log(`Generated Budget Total: ${total}`);
+            }
 
             proposal.settings = {
                 currency: 'EUR',
@@ -507,11 +602,9 @@ Return ONLY valid JSON, no other text.`;
                 customParams: customParams
             };
 
-            // Auto-save
+            // Auto-save to both KV and Supabase table
             await KV.set(proposal.id, proposal);
-
-            // Also save to Supabase "proposals" table for backup/persistence if needed
-            // (Optional improvement for later, keeping KV consistency for now)
+            await saveToSupabase(proposal);
 
             return new Response(
                 JSON.stringify(proposal),
@@ -565,6 +658,7 @@ Return ONLY valid JSON, no other text.`;
             };
 
             await KV.set(id, proposal);
+            await saveToSupabase(proposal);
 
             return new Response(
                 JSON.stringify(proposal),
@@ -592,6 +686,7 @@ Return ONLY valid JSON, no other text.`;
             };
 
             await KV.set(id!, updated);
+            await saveToSupabase(updated);
 
             return new Response(
                 JSON.stringify(updated),

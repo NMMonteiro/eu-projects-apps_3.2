@@ -1,5 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+/// <reference lib="deno.ns" />
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
