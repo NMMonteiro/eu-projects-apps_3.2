@@ -144,14 +144,39 @@ export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: wp.description }} />
+                            {wp.activities && wp.activities.length > 0 && (
+                                <div className="mt-6 space-y-4">
+                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-3 flex items-center gap-2">
+                                        <Layers className="w-3 h-3" /> Activities & Tasks
+                                    </h5>
+                                    <div className="grid gap-3">
+                                        {wp.activities.map((act: any, aIdx: number) => (
+                                            <div key={aIdx} className="bg-slate-50/80 border border-slate-100 rounded-lg p-4 text-sm">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="font-bold text-slate-800">
+                                                        {actualIndex + 1}.{aIdx + 1} {act.name}
+                                                    </span>
+                                                    {act.estimatedBudget > 0 && (
+                                                        <span className="text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-slate-200 text-slate-500">
+                                                            {formatCurrency(act.estimatedBudget)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-slate-600 leading-relaxed text-xs" dangerouslySetInnerHTML={{ __html: act.description }} />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {wp.deliverables && wp.deliverables.length > 0 && (
-                                <div className="bg-secondary/30 rounded-lg p-4">
-                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-2">Deliverables</h5>
-                                    <ul className="space-y-1.5">
+                                <div className="bg-secondary/20 rounded-lg p-4 mt-6">
+                                    <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-3">Expected Deliverables</h5>
+                                    <ul className="space-y-2">
                                         {wp.deliverables.map((del: string, dIdx: number) => (
-                                            <li key={dIdx} className="flex items-start gap-2 text-sm">
-                                                <CheckCircle2 className="h-4 w-4 text-green-500/60 mt-0.5 shrink-0" />
-                                                <span className="text-muted-foreground/90">{del}</span>
+                                            <li key={dIdx} className="flex items-start gap-2 text-xs">
+                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                                                <span className="text-slate-600">{del}</span>
                                             </li>
                                         ))}
                                     </ul>

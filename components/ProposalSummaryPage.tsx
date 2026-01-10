@@ -83,8 +83,12 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
 
     const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
     const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
-    const currency = proposal.settings?.currency || 'EUR';
-    const totalBudget = (proposal.budget || []).reduce((sum, item) => sum + (item.cost || 0), 0);
+    const workPackages = proposal.workPackages || (proposal as any).work_packages || [];
+    const budget = proposal.budget || (proposal as any).budget || [];
+    const risks = proposal.risks || (proposal as any).risks || [];
+    const settings = proposal.settings || (proposal as any).settings || { currency: 'EUR' };
+    const currency = settings.currency || 'EUR';
+    const totalBudget = (budget || []).reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
     const coordinator = proposal.partners?.find(p => p.isCoordinator);
 
     // 1. Gather all possible narrative components EXHAUSTIVELY
@@ -162,8 +166,8 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
     });
 
     // Add any missing Work Packages automatically
-    if (proposal.workPackages?.length) {
-        proposal.workPackages.forEach((wp, idx) => {
+    if (workPackages?.length) {
+        workPackages.forEach((wp: any, idx: number) => {
             if (!wpIndicesRendered.has(idx)) {
                 finalDocument.push({
                     id: `work_package_${idx + 1}`,
@@ -285,9 +289,9 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                         const lowerId = (section.id || "").toLowerCase();
                         const lowerTitle = (section.title || "").toLowerCase();
 
-                        const isWP = lowerId.includes('work_package') || lowerTitle.includes('work package');
-                        const isBudget = lowerId.includes('budget') || lowerTitle.includes('budget');
-                        const isRisk = lowerId.includes('risk') || lowerTitle.includes('risk');
+                        const isWP = lowerId.includes('work_package') || lowerTitle.includes('work package') || section.type === 'work_package';
+                        const isBudget = lowerId.includes('budget') || lowerTitle.includes('budget') || section.type === 'budget';
+                        const isRisk = lowerId.includes('risk') || lowerTitle.includes('risk') || section.type === 'risk' || section.type === 'risks';
 
                         // Don't render if it's completely empty AND not a structured data placeholder
                         if (!section.content && !isWP && !isBudget && !isRisk) return null;
@@ -314,18 +318,22 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                     {/* Structured data rendering embedded within the narrative flow */}
                                     <div className="mt-8 not-prose">
                                         {isWP && (() => {
-                                            const match = section.id.match(/work_package_(\d+)/i) || section.title.toLowerCase().match(/work package (\d+)/i);
+                                            // Try to find if this is a specific WP (e.g. WP1, WP2)
+                                            const match = section.id.match(/work_package_(\d+)/i) ||
+                                                section.title.match(/WP\s*(\d+)/i) ||
+                                                section.title.toLowerCase().match(/work package\s*(\d+)/i);
+
                                             const wpIdx = match ? parseInt(match[1]) - 1 : undefined;
-                                            return <DynamicWorkPackageSection workPackages={proposal.workPackages} limitToIndex={wpIdx} currency={currency} />;
+                                            return <DynamicWorkPackageSection workPackages={workPackages} limitToIndex={wpIdx} currency={currency} />;
                                         })()}
                                         {isBudget && (
                                             <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-100 shadow-sm">
-                                                <DynamicBudgetSection budget={proposal.budget} currency={currency} />
+                                                <DynamicBudgetSection budget={budget} currency={currency} />
                                             </div>
                                         )}
                                         {isRisk && (
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <DynamicRiskSection risks={proposal.risks || []} />
+                                                <DynamicRiskSection risks={risks} />
                                             </div>
                                         )}
                                     </div>
