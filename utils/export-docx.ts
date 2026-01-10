@@ -603,9 +603,15 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
         // Master Table
         const allWPs = p.workPackages.map((wp, i) => normalizeWorkPackage(wp, i));
         docChildren.push(createWorkPackageTable(allWPs));
-      } else if (isWP && p.workPackages && p.workPackages.length > 0 && section.wpIdx !== undefined) {
+      } else if (isWP && section.wpIdx !== undefined) {
         // Individual WP Detail: Narrative is already above, add activities/deliverables here
-        const wp = normalizeWorkPackage(p.workPackages[section.wpIdx], section.wpIdx);
+        const wpData = p.workPackages?.[section.wpIdx];
+        const wp = normalizeWorkPackage(wpData || {
+          name: section.title,
+          description: section.content || "",
+          activities: [],
+          deliverables: []
+        }, section.wpIdx);
 
         // Activities
         if (wp.activities?.length > 0) {

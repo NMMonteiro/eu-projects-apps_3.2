@@ -88,15 +88,20 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 if (isWP) {
                     lastWPLevel = level;
-                    // Try to extract index from key or label
-                    const match = key.match(/\d+/) || ts.label.match(/\d+/);
-                    if (match) {
-                        wpIdx = parseInt(match[match.length - 1]) - 1;
+                    // Try to extract index from key or label - be more specific to avoid matching section numbers
+                    const wpMatch = key.match(/workpackage(\d+)/i) ||
+                        key.match(/wp(\d+)/i) ||
+                        ts.label.match(/Work Package\s*(\d+)/i) ||
+                        ts.label.match(/WP\s*(\d+)/i);
+
+                    if (wpMatch) {
+                        wpIdx = parseInt(wpMatch[1]) - 1;
                         renderedWPIndices.add(wpIdx);
                     }
 
-                    // Insert the Master Overview at the FIRST WP-related section found in template
-                    if (!wpOverviewInserted) {
+                    // Insert the Master Overview at the FIRST REAL WP section (with index)
+                    // or if it's a generic container, we'll wait for the first child or handle in leftovers
+                    if (!wpOverviewInserted && wpIdx !== undefined) {
                         finalDocument.push({
                             id: 'wp_master_list',
                             title: 'Work Package Overview',
@@ -104,7 +109,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                             type: 'wp_list'
                         });
                         wpOverviewInserted = true;
-                        lastWPRelevantIndex = finalDocument.length - 1;
                     }
                 }
 
