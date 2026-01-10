@@ -18,12 +18,9 @@ const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
 
 /**
  * ULTRA STRICT WP Index extraction.
- * Only matches "WP 1", "Work Package 1", "WP_1" or "Work package n°1".
- * Does NOT match "Activities (2)" or similar.
  */
 function extractWPIndex(text: string): number | undefined {
     if (!text) return undefined;
-    // Look for WP keywords followed by a number, anchored or isolated
     const match = text.match(/\b(?:Work\s*Packages?|WP|WP_)\s*(?:n°|no\.?|#|number)?\s*(\d+)\b/i);
     if (match) return parseInt(match[1]) - 1;
     return undefined;
@@ -40,7 +37,7 @@ function cleanTitle(title: string): string {
 }
 
 /**
- * Assembles a structured document with TOTAL Deduping and FLAT Sequential Ordering.
+ * Assembles a structured document with ABSOLUTE Sequential Lockdown.
  */
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const layout = proposal.layout?.sequence || [];
@@ -52,159 +49,180 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const wpIdxToPoolKey = new Map<number, string>();
     const normTitleToPoolKey = new Map<string, string>();
 
-    const FOUNDATION_PRIORITY: Record<string, number> = {
-        'context': 1, 'projectsummary': 2, 'abstract': 2, 'summary': 2, 'relevance': 3,
-        'projectdescription': 4, 'needsanalysis': 5, 'partnershiparrangements': 6,
-        'partnershipandcooperation': 6, 'consortium': 6, 'impact': 10, 'design': 11, 'implementation': 11,
-        'projectdesignandimplementation': 11, 'workpackagesoverview': 100, 'wplist': 100,
-        'budget': 800, 'risks': 810, 'declaration': 990, 'checklist': 995, 'annexes': 992, 'otherdocuments': 993, 'euvalues': 994
+    // --- MASTER SEQUENCE (ABSOLUTE TRUTH) ---
+    // These values are large spread to allow for custom insertions while maintaining block order.
+    const MASTER_ORDER: Record<string, number> = {
+        'summary': 0, 'abstract': 0, 'projectsummary': 0,
+        'context': 100,
+        'relevance': 200,
+        'projectdescription': 300,
+        'needsanalysis': 400,
+        'impact': 500,
+        'design': 600, 'implementation': 600, 'projectdesignandimplementation': 600,
+        'partnershiparrangements': 700, 'partnershipandcooperation': 700,
+        'workpackagesoverview': 1000, 'wplist': 1000,
+        'wp1': 1101, 'wp2': 1102, 'wp3': 1103, 'wp4': 1104, 'wp5': 1105,
+        'partners': 2000, 'participatingorganisations': 2000,
+        'partnerprofiles': 2100, 'organisationprofiles': 2100,
+        'budget': 3000, 'budgetandcostestimation': 3000,
+        'risks': 4000, 'riskmanagement': 4000,
+        'euvalues': 8000,
+        'declaration': 9000,
+        'annexes': 9500,
+        'checklist': 9900, 'otherdocuments': 9910
     };
 
-    const getLayoutPriority = (key: string, title?: string): number => {
+    const getPriority = (key: string, title?: string): number => {
         const nk = normalize(key);
         const nt = normalize(title || "");
 
-        // 1. Check EXPLICIT Layout first
+        // 1. Check WP Special logic
+        const wpNum = extractWPIndex(key) ?? extractWPIndex(title || '');
+        if (wpNum !== undefined) return 1101 + wpNum;
+
+        // 2. Check MASTER_ORDER (The Hammer)
+        if (MASTER_ORDER[nk]) return MASTER_ORDER[nk];
+        if (MASTER_ORDER[nt]) return MASTER_ORDER[nt];
+        for (const [mk, mv] of Object.entries(MASTER_ORDER)) {
+            if (nk.includes(mk) || nt.includes(mk)) return mv;
+        }
+
+        // 3. Fallback to Layout Sequence
         if (layout.length > 0) {
-            const idx = layout.findIndex(item => {
+            const lIdx = layout.findIndex(item => {
                 const ni = normalize(item);
-                if (nk === ni || nt === ni || (ni.length > 4 && (nk.includes(ni) || nt.includes(ni)))) return true;
-                return false;
+                return (nk === ni || nt === ni || ni.includes(nk) || nk.includes(ni));
             });
-            if (idx !== -1) return idx;
+            if (lIdx !== -1) return 10000 + lIdx;
         }
 
-        // 2. WP Special Zone
-        const wpIdx = extractWPIndex(key) ?? extractWPIndex(title || '');
-        if (wpIdx !== undefined) return 101 + wpIdx;
-
-        // 3. Fallback Map
-        if (FOUNDATION_PRIORITY[nk]) return FOUNDATION_PRIORITY[nk];
-        for (const [fk, fv] of Object.entries(FOUNDATION_PRIORITY)) {
-            if (nk.includes(fk) || nt.includes(fk)) return fv;
-        }
-        return 500;
+        return 5000;
     };
 
-    // 1. HYDRATE Skeleton from Template
+    // 1. Process Template Skeleton
     if (fundingScheme?.template_json?.sections) {
-        const processSections = (sections: any[], level = 1) => {
+        const process = (sections: any[], level = 1) => {
             sections.forEach((s, sIdx) => {
-                const normLabel = normalize(s.label);
-                const baseKey = s.key || normLabel;
-                const poolKey = `template_${level}_${sIdx}_${baseKey}`;
+                const nl = normalize(s.label);
+                const bk = s.key || nl;
+                const pk = `t_${level}_${sIdx}_${bk}`;
 
-                const wpIdx = extractWPIndex(baseKey) ?? extractWPIndex(s.label);
-                // A WP Header must look like "Work Package 1" etc
-                const isWPHeader = wpIdx !== undefined && (normLabel.includes('workpackage') || normLabel === `wp${wpIdx + 1}`);
+                const wpIdx = extractWPIndex(bk) ?? extractWPIndex(s.label);
+                // A WP header MUST mention "Work Package" or "WP" explicitly and be a header
+                const isWPHeader = wpIdx !== undefined && (nl.includes('workpackage') || nl.includes('wp n'));
 
-                if (isWPHeader && !wpIdxToPoolKey.has(wpIdx!)) {
-                    wpIdxToPoolKey.set(wpIdx!, poolKey);
+                // FORCE LIFTING: If it's a major section, it MUST be level 1
+                let finalLevel = level;
+                if (isWPHeader || MASTER_ORDER[nl] || MASTER_ORDER[normalize(bk)]) {
+                    finalLevel = 1;
                 }
-                normTitleToPoolKey.set(normLabel, poolKey);
 
-                sectionPool.set(poolKey, {
-                    id: poolKey, title: cleanTitle(s.label), description: s.description,
-                    level: isWPHeader ? 1 : level, // Lift WPs to 1
-                    wpIdx: wpIdx,
+                if (isWPHeader && !wpIdxToPoolKey.has(wpIdx!)) wpIdxToPoolKey.set(wpIdx!, pk);
+                normTitleToPoolKey.set(nl, pk);
+
+                sectionPool.set(pk, {
+                    id: pk, title: cleanTitle(s.label), description: s.description,
+                    level: finalLevel, wpIdx: wpIdx,
                     type: isWPHeader ? 'work_package' : (wpIdx !== undefined ? 'wp_item' : s.type),
-                    order: getLayoutPriority(baseKey, s.label) + (sIdx * 0.001)
+                    order: getPriority(bk, s.label) + (sIdx * 0.001)
                 });
 
-                if (s.subsections && s.subsections.length > 0) {
-                    processSections(s.subsections, level + 1);
-                }
+                if (s.subsections && s.subsections.length > 0) process(s.subsections, level + 1);
             });
         };
-        processSections(fundingScheme.template_json.sections);
+        process(fundingScheme.template_json.sections);
     }
 
-    // 2. MERGE Dynamic Content (Aggressive Deduplication)
+    // 2. Sync Work Packages from DB (Guarantees WP4, WP5 visibility)
+    [0, 1, 2, 3, 4].forEach(idx => {
+        const dbWp = workPackages[idx];
+        const existingKey = wpIdxToPoolKey.get(idx);
+
+        if (existingKey) {
+            const s = sectionPool.get(existingKey)!;
+            // Merge DB data if present
+            if (dbWp) {
+                if (dbWp.name && (!s.title || s.title.length < 10)) s.title = cleanTitle(dbWp.name);
+                if (!s.content || s.content.length < (dbWp.description || "").length) s.content = dbWp.description;
+            }
+            s.type = 'work_package';
+            s.level = 1; // Double lock
+        } else if (dbWp || dynamicSections[`wp${idx + 1}`] || dynamicSections[`work_package_${idx + 1}`]) {
+            // Create placeholders for missing template nodes
+            const id = `extra_wp_${idx}`;
+            sectionPool.set(id, {
+                id, title: cleanTitle(dbWp?.name || `Work Package ${idx + 1}`),
+                content: dbWp?.description || dynamicSections[`wp${idx + 1}`] || dynamicSections[`work_package_${idx + 1}`],
+                level: 1, wpIdx: idx, type: 'work_package', order: 1101 + idx
+            });
+            wpIdxToPoolKey.set(idx, id);
+        }
+    });
+
+    // 3. Merge Dynamic Narrative Sections
     Object.entries(dynamicSections).forEach(([key, val]) => {
-        if (!val || typeof val !== 'string' || val.length < 5) return;
+        if (!val || typeof val !== 'string' || val.length < 10) return;
         const nk = normalize(key);
         if (['summary', 'abstract', 'budget', 'partners', 'risks', 'project_summary'].includes(nk)) return;
 
         const wpIdx = extractWPIndex(key);
-        let targetKey = '';
+        let target = wpIdx !== undefined ? wpIdxToPoolKey.get(wpIdx) : normTitleToPoolKey.get(nk);
 
-        if (wpIdx !== undefined && wpIdxToPoolKey.has(wpIdx)) {
-            targetKey = wpIdxToPoolKey.get(wpIdx)!;
-        } else if (normTitleToPoolKey.has(nk)) {
-            targetKey = normTitleToPoolKey.get(nk)!;
-        } else {
-            // Find by partial title/key match
+        if (!target) {
+            // Last ditch fuzzy search
             for (const [pK, pV] of sectionPool.entries()) {
-                const pn = normalize(pK);
-                const tn = normalize(pV.title);
-                if (pn === nk || tn === nk || nk.includes(pn) || pn.includes(nk)) {
-                    targetKey = pK; break;
-                }
+                if (normalize(pV.title).includes(nk) || nk.includes(normalize(pV.title))) { target = pK; break; }
             }
         }
 
-        if (targetKey) {
-            const existing = sectionPool.get(targetKey)!;
-            // Join or set content
-            if (!existing.content) existing.content = val;
-            else if (!existing.content.includes(val.substring(0, 20))) existing.content += "\n\n" + val;
+        if (target) {
+            const s = sectionPool.get(target)!;
+            if (!s.content || val.length > s.content.length) s.content = val;
         } else {
-            sectionPool.set(key, {
-                id: key, title: cleanTitle(key), content: val, level: 1, wpIdx: wpIdx,
-                type: wpIdx !== undefined ? 'wp_item' : undefined,
-                order: getLayoutPriority(key)
-            });
+            sectionPool.set(key, { id: key, title: cleanTitle(key), content: val, level: 1, wpIdx: wpIdx, order: getPriority(key) });
         }
     });
 
-    // 3. SPECIAL DATA ANCHORS
-    const summaryVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
-    if (summaryVal) {
-        sectionPool.set('summary', { id: 'summary', title: 'Executive Summary', content: summaryVal, level: 1, order: -1 });
-    }
-
-    const ensureAnchor = (id: string, title: string, type: string) => {
+    // 4. Anchor Structural Blocks
+    const ensureHeader = (id: string, searchTitle: string, type: string) => {
         let found = '';
+        const nt = normalize(searchTitle);
         for (const [pK, pV] of sectionPool.entries()) {
-            if (normalize(pV.title).includes(normalize(title))) { found = pK; break; }
+            if (normalize(pV.title).includes(nt) || nt.includes(normalize(pV.title))) { found = pK; break; }
         }
-        if (found) sectionPool.get(found)!.type = type;
-        else sectionPool.set(id, { id, title, level: 1, type, order: getLayoutPriority(id, title) });
+        if (found) {
+            const s = sectionPool.get(found)!;
+            s.type = type; s.level = 1; s.order = MASTER_ORDER[nt] || s.order;
+        } else {
+            sectionPool.set(id, { id, title: searchTitle, level: 1, type, order: MASTER_ORDER[nt] || 5000 });
+        }
     };
 
     if (proposal.partners?.length > 0) {
-        ensureAnchor('p_anchor', 'Participating Organisations', 'partners');
-        ensureAnchor('prof_anchor', 'Organisation Profiles & Capacity', 'partner_profiles');
+        ensureHeader('p_main', 'Participating Organisations', 'partners');
+        ensureHeader('p_prof', 'Organisation Profiles & Capacity', 'partner_profiles');
     }
-    if ((proposal.budget || []).length > 0) ensureAnchor('b_anchor', 'Budget & Cost Estimation', 'budget');
-    if ((proposal.risks || []).length > 0) ensureAnchor('r_anchor', 'Risk Management & Mitigation', 'risk');
+    if ((proposal.budget || []).length > 0) ensureHeader('b_main', 'Budget & Cost Estimation', 'budget');
+    if ((proposal.risks || []).length > 0) ensureHeader('r_main', 'Risk Management & Mitigation', 'risk');
 
-    workPackages.forEach((wp: any, idx: number) => {
-        const wpKey = wpIdxToPoolKey.get(idx);
-        if (wpKey) {
-            const s = sectionPool.get(wpKey)!;
-            if (wp.name && (!s.title || s.title.length < 10)) s.title = cleanTitle(wp.name);
-            if (!s.content) s.content = wp.description;
-            s.type = 'work_package';
-        }
-    });
+    // 5. Executive Summary
+    const sumVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
+    if (sumVal) sectionPool.set('summary', { id: 'summary', title: 'Executive Summary', content: sumVal, level: 1, order: 0 });
 
-    // 4. FLATTEN & SORT
-    const items = Array.from(sectionPool.values()).sort((a, b) => (a.order ?? 500) - (b.order ?? 500));
+    // 6. Final Sort & Filter
+    const items = Array.from(sectionPool.values()).sort((a, b) => (a.order ?? 5000) - (b.order ?? 5000));
 
-    // Overview Injection
-    const firstWPIdx = items.findIndex(s => s.type === 'work_package');
-    if (firstWPIdx !== -1 && !items.some(s => s.type === 'wp_list')) {
-        items.splice(firstWPIdx, 0, { id: 'wp_ov', title: 'Work packages overview', level: 1, type: 'wp_list', order: items[firstWPIdx].order! - 0.01 });
+    // Inject Overview strictly before WP1
+    const wp1Idx = items.findIndex(s => s.wpIdx === 0 && s.type === 'work_package');
+    if (wp1Idx !== -1 && !items.some(s => s.type === 'wp_list')) {
+        items.splice(wp1Idx, 0, { id: 'wp_list', title: 'Work packages overview', level: 1, type: 'wp_list', order: 1000 });
     }
 
     return items.filter(s => {
-        // Keep structural
         if (['wp_list', 'partners', 'budget', 'risk', 'work_package', 'partner_profiles'].includes(s.type || '')) return true;
-        // Keep narrative
-        if (s.content && s.content.length > 20) return true;
-        // Keep structural headers ONLY if they have valid kids
-        if (s.level <= 2) {
+        if (s.content && s.content.length > 5) return true;
+        // Keep structural headers if they contain active content
+        if (s.level === 1) {
             return items.some(child => child.id.startsWith(s.id) && child.id !== s.id && (child.content || child.type));
         }
         return false;
