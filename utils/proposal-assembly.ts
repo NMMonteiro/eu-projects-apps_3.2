@@ -32,8 +32,10 @@ function cleanTitle(title: string): string {
         .replace(/undefined/gi, '')
         .replace(/\(?\s*null\s*\)?/gi, '')
         .replace(/undefined_/gi, ' ')
+        .replace(/-\s*null/gi, '') // Handle "Activities (2 - null)"
         .replace(/_/g, ' ')
         .replace(/\s+/g, ' ')
+        .replace(/\(\s*\)/g, '')   // Remove empty parentheses
         .replace(/\(\s*-\s*\)/g, '')
         .replace(/\s*-\s*$/, '') // Remove trailing dash
         .trim();
@@ -154,8 +156,27 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 if (currentIsInsideWP) {
                     const lowLabel = ts.label.toLowerCase();
-                    if (lowLabel === 'activities' || lowLabel.includes('description of')) {
-                        return; // Skip rendering these as separate sections/sidebar items
+                    const lowKey = (ts.key || "").toLowerCase();
+
+                    // Suppress redundant boilerplate containers
+                    if (lowLabel.startsWith('activities') ||
+                        lowLabel.includes('description of') ||
+                        lowKey.includes('activities_description') ||
+                        lowKey.endsWith('_activities')) {
+
+                        // Mark this and all children as rendered to avoid leftovers
+                        const markRendered = (sArr: any[]) => {
+                            sArr.forEach(s => {
+                                renderedKeys.add(s.key);
+                                const sk = s.key || s.label?.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
+                                renderedKeys.add(sk);
+                                if (s.subsections) markRendered(s.subsections);
+                            });
+                        };
+                        renderedKeys.add(ts.key);
+                        renderedKeys.add(key);
+                        if (ts.subsections) markRendered(ts.subsections);
+                        return;
                     }
                     lastWPRelevantIndex = finalDocument.length - 1;
                 }
@@ -175,6 +196,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             const nk = normalize(key);
 
             if (nk === 'summary' || nk === 'abstract' || nk === 'budget' || nk === 'partners' || nk === 'risks') return;
+            if (nk.includes('descriptionoftheactivities') || nk.includes('activitiesdescription')) return;
 
             // Don't let WP leftovers float to the top
             const wpMatch = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
