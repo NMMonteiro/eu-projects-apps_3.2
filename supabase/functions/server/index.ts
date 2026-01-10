@@ -283,14 +283,20 @@ Return ONLY valid JSON, no other text.`;
             // Load partner details if provided
             const partners = [];
             const filteredPartners = selectedPartners.filter(Boolean);
+            console.log(`🔍 Loading ${filteredPartners.length} partners from DB: ${filteredPartners.join(', ')}`);
+
             if (filteredPartners.length > 0) {
                 const supabase = getSupabaseClient();
-                const { data: dbPartners } = await supabase
+                const { data: dbPartners, error: partnerError } = await supabase
                     .from('partners')
                     .select('*')
                     .in('id', filteredPartners);
 
-                if (dbPartners) {
+                if (partnerError) console.error('❌ Error fetching partners:', partnerError);
+
+                if (dbPartners && dbPartners.length > 0) {
+                    console.log(`✅ Found ${dbPartners.length} partners in DB.`);
+
                     // Map to camelCase for the prompt builder
                     partners.push(...dbPartners.map(p => ({
                         id: p.id,
@@ -326,19 +332,29 @@ Return ONLY valid JSON, no other text.`;
                         contactPersonPhone: p.contact_person_phone || '',
                         contactPersonRole: p.contact_person_role || '',
                         role: p.role || '',
-                        isCoordinator: selectedPartners.indexOf(p.id) === 0
+                        isCoordinator: p.id === filteredPartners[0] // First one selected is always coordinator
                     })));
-                    // FORCE: Sort partners so coordinator is always at index 0
-                    partners.sort((a: any, b: any) => (a.isCoordinator ? -1 : b.isCoordinator ? 1 : 0));
+
+                    // Ensure the order matches the selection
+                    partners.sort((a, b) => filteredPartners.indexOf(a.id) - filteredPartners.indexOf(b.id));
                 }
 
                 // Fallback to KV if any missing (for transition)
-                for (const partnerId of selectedPartners) {
+                for (const partnerId of filteredPartners) {
                     if (!partners.find(p => p.id === partnerId)) {
                         const kvPartner = await KV.get(`partner:${partnerId}`);
-                        if (kvPartner) partners.push(kvPartner);
+                        if (kvPartner) {
+                            console.log(`📦 Recovered partner ${partnerId} from KV.`);
+                            partners.push({ ...kvPartner, isCoordinator: partnerId === filteredPartners[0] });
+                        }
                     }
                 }
+            }
+
+            if (partners.length === 0) {
+                console.warn('⚠️ No partners found for this proposal generation!');
+            } else {
+                console.log(`🎭 Final partner list: ${partners.map(p => `${p.name} (${p.isCoordinator ? 'Coord' : 'Partner'})`).join(', ')}`);
             }
 
             // Load funding scheme if selected

@@ -291,14 +291,16 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
 
     const dynamicSections = proposal.dynamic_sections || proposal.dynamicSections || {};
 
-    // Explicit sections that MUST be visible if they exist in dynamicSections
     const standardKeys = [
-        { key: 'context', label: 'Context', level: 0 },
-        { key: 'project_summary', label: 'Project Summary', level: 0 },
-        { key: 'relevance', label: 'Relevance', level: 0 },
-        { key: 'partnership_arrangements', label: 'Partnership Arrangements', level: 0 },
-        { key: 'impact', label: 'Impact', level: 0 },
-        { key: 'project_design_implementation', label: 'Project Design & Implementation', level: 0 },
+        { key: 'applicant_organisation', label: '1. Applicant Organisation', level: 0 },
+        { key: 'participating_organisations', label: '2. Participating Organisations', level: 0 },
+        { key: 'background_and_experience', label: '3. Background and Experience', level: 0 },
+        { key: 'context', label: '4. Context', level: 0 },
+        { key: 'project_summary', label: '5. Project Summary', level: 0 },
+        { key: 'relevance', label: '6. Relevance', level: 0 },
+        { key: 'partnership_arrangements', label: '7. Partnership Arrangements', level: 0 },
+        { key: 'impact', label: '8. Impact', level: 0 },
+        { key: 'project_design_implementation', label: '9. Project Design & Implementation', level: 0 },
         { key: 'work_package_1', label: 'WP1: Management', level: 0 },
         { key: 'work_package_2', label: 'WP2: Development', level: 0 },
         { key: 'work_package_3', label: 'WP3: Implementation', level: 0 },
@@ -314,7 +316,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
 
     let templateSections = fundingScheme?.template_json?.sections
         ? getFlattenedSections(fundingScheme.template_json.sections)
-        : standardKeys;
+        : [...standardKeys];
 
     const templateKeys = new Set((templateSections || []).map(s => s.key));
 
@@ -326,16 +328,8 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         }
     });
 
-    const templateWPKeys = new Set(templateSections
-        .filter(s => s.label?.toLowerCase().includes('work package') || s.key.includes('wp'))
-        .map(s => s.key));
-
     const extraSections = Object.keys(dynamicSections || {})
-        .filter(key => {
-            if (templateKeys.has(key)) return false;
-            // Only hide work_package_X if it's EXACTLY in templateKeys (already handled above)
-            return true;
-        })
+        .filter(key => !templateKeys.has(key))
         .map(key => ({
             key,
             label: key.replace(/_/g, ' ').replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()),
@@ -406,6 +400,119 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                     </TabsList>
                 </div>
 
+                {/* Legacy View */}
+                <TabsContent value="legacy" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <Card className="bg-white text-black border-none shadow-2xl relative overflow-hidden font-serif">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-primary"></div>
+                        <CardContent className="p-12 md:p-20 space-y-12">
+                            <div className="text-center space-y-6 pb-12 border-b border-gray-100">
+                                <h1 className="text-5xl font-bold tracking-tight text-gray-900 leading-tight">
+                                    {proposal.title}
+                                </h1>
+                                <div className="flex justify-center gap-8 text-gray-500 font-sans tracking-widest uppercase text-xs font-semibold">
+                                    <span>{fundingScheme?.name || 'Erasmus+ KA220'}</span>
+                                    <span>•</span>
+                                    <span>Grant Proposal</span>
+                                    <span>•</span>
+                                    <span>Version 1.0</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 py-10">
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-bold uppercase tracking-widest text-primary font-sans">Lead Organization</h4>
+                                    <p className="text-xl font-bold text-gray-800">{partnersArray[0]?.name || 'Not Assigned'}</p>
+                                    <p className="text-sm text-gray-500">{partnersArray[0]?.country || 'N/A'}</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <h4 className="text-xs font-bold uppercase tracking-widest text-primary font-sans">Total Grant Requested</h4>
+                                    <p className="text-4xl font-black text-gray-900">€{totalBudget.toLocaleString()}</p>
+                                    <p className="text-sm text-gray-500 italic">Personnel and Operational combined</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-20">
+                                {expectedSections.map((section, idx) => {
+                                    const content = dynamicSections[section.key];
+                                    if (!content) return null;
+
+                                    return (
+                                        <div key={idx} className="space-y-6 scroll-mt-20">
+                                            <div className="flex items-baseline gap-4 border-b border-gray-100 pb-4">
+                                                <span className="text-primary font-sans font-bold text-sm tracking-tighter opacity-30">
+                                                    SECTION {String(idx + 1).padStart(2, '0')}
+                                                </span>
+                                                <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
+                                                    {section.label}
+                                                </h2>
+                                            </div>
+                                            <div
+                                                className="prose prose-slate max-w-none text-gray-700 leading-relaxed text-lg"
+                                                dangerouslySetInnerHTML={{ __html: content }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+
+                                <div className="pt-20 border-t border-gray-200 space-y-12">
+                                    <div className="space-y-4 text-center">
+                                        <h2 className="text-3xl font-bold text-gray-900">Appendix A: Consortium Members</h2>
+                                        <p className="text-gray-500 max-w-2xl mx-auto">This section lists all participating organizations and their assigned roles in the project.</p>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {partnersArray.map((p: any, i: number) => (
+                                            <div key={i} className="p-6 border border-gray-100 rounded-xl bg-gray-50 space-y-2 font-sans">
+                                                <div className="flex justify-between items-start">
+                                                    <h5 className="font-bold text-gray-900">{p.name}</h5>
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${p.isCoordinator ? "bg-primary text-white" : "bg-gray-200 text-gray-600"}`}>
+                                                        {p.isCoordinator ? 'Lead Coordinator' : 'Partner'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-500">{p.country} • {p.organizationType || 'Institution'}</p>
+                                                <p className="text-xs text-gray-600 line-clamp-3 leading-relaxed mt-4 italic">{p.description}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="pt-20 border-t border-gray-200 space-y-12">
+                                    <div className="space-y-4 text-center">
+                                        <h2 className="text-3xl font-bold text-gray-900">Appendix B: Detailed Financial Breakdown</h2>
+                                        <p className="text-gray-500 max-w-2xl mx-auto">Consolidated budget breakdown per category and partner allocations.</p>
+                                    </div>
+                                    <div className="overflow-hidden border border-gray-100 rounded-xl font-sans">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-gray-100 text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                                                    <th className="px-6 py-4">Item Detail</th>
+                                                    <th className="px-6 py-4 text-right">Requested (€)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="text-sm divide-y divide-gray-50">
+                                                {budgetArray.map((b: any, i: number) => (
+                                                    <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                                                        <td className="px-6 py-5">
+                                                            <p className="font-bold text-gray-900">{b.item}</p>
+                                                            <p className="text-xs text-gray-500 mt-1">{b.description}</p>
+                                                        </td>
+                                                        <td className="px-6 py-5 text-right font-black text-primary">
+                                                            €{(b.cost || 0).toLocaleString()}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                <tr className="bg-primary/5 font-black text-gray-900 text-lg">
+                                                    <td className="px-6 py-6">TOTAL ESTIMATED BUDGET</td>
+                                                    <td className="px-6 py-6 text-right text-primary">€{totalBudget.toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
                 {/* Structured View */}
                 <TabsContent value="structured" className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <div className="space-y-6">
@@ -418,138 +525,112 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                 {workPackagesArray.length} Total Packages
                             </Badge>
                         </div>
-
-                        <div className="space-y-4">
+                        <div className="grid gap-6">
                             {workPackagesArray.map((wp: any, idx: number) => (
-                                <Card key={idx} className="bg-secondary/10 border-white/5 rounded-3xl p-8 mb-6 overflow-hidden shadow-2xl relative group">
-                                    <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-100 transition-opacity">
-                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
-                                            const newWPs = workPackagesArray.filter((_, i) => i !== idx);
-                                            handleUpdateProposal({ workPackages: newWPs });
-                                        }}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-
-                                    <div className="flex items-center gap-6 mb-8">
-                                        <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
-                                            <Activity className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
+                                <Card key={idx} className="bg-white/5 border-white/10 overflow-hidden group hover:border-primary/50 transition-all duration-300">
+                                    <CardHeader
+                                        className="cursor-pointer flex flex-row items-center justify-between py-6 px-8"
+                                        onClick={() => setExpandedWp(expandedWp === idx ? -1 : idx)}
+                                    >
+                                        <div className="flex items-center gap-6">
+                                            <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                                                <Activity className="h-7 w-7" />
+                                            </div>
+                                            <div>
+                                                <CardTitle className="text-xl font-bold tracking-tight italic uppercase">
+                                                    {wp.name || `WP${idx + 1}: Untitled Work Package`}
+                                                </CardTitle>
+                                                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mt-1">
+                                                    Duration: {wp.duration || 'M1-M24'}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="flex-1">
-                                            <Input
-                                                className="text-2xl font-black tracking-tight italic bg-transparent border-none p-0 h-auto focus-visible:ring-0"
-                                                value={wp.name}
-                                                onChange={(e) => {
-                                                    const newWPs = [...workPackagesArray];
-                                                    newWPs[idx] = { ...wp, name: e.target.value };
-                                                    handleUpdateProposal({ workPackages: newWPs });
-                                                }}
-                                            />
-                                            <p className="text-xs text-muted-foreground font-black uppercase tracking-[0.3em] opacity-40">Duration: {wp.duration || 'Not set'}</p>
+                                        <div className="flex items-center gap-4">
+                                            <Button variant="ghost" size="icon" className="text-destructive" onClick={(e) => {
+                                                e.stopPropagation();
+                                                const newWPs = workPackagesArray.filter((_, i) => i !== idx);
+                                                handleUpdateProposal({ workPackages: newWPs });
+                                            }}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                            <ChevronDown className={`h-6 w-6 transition-transform duration-300 text-muted-foreground ${expandedWp === idx ? "rotate-180" : ""}`} />
                                         </div>
-                                        <Button variant="ghost" size="sm" onClick={() => setExpandedWp(expandedWp === idx ? -1 : idx)}>
-                                            {expandedWp === idx ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
-                                        </Button>
-                                    </div>
+                                    </CardHeader>
 
                                     {expandedWp === idx && (
-                                        <CardContent className="p-0 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
-                                            <div className="mb-8">
-                                                <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70 mb-3">Technical Objectives</h5>
-                                                <textarea
-                                                    className="w-full bg-black/30 border border-white/5 rounded-2xl p-4 text-sm text-muted-foreground min-h-[100px] focus:outline-none focus:border-primary/50 transition-colors"
-                                                    value={wp.description}
-                                                    onChange={(e) => {
-                                                        const newWPs = [...workPackagesArray];
-                                                        newWPs[idx] = { ...wp, description: e.target.value };
-                                                        handleUpdateProposal({ workPackages: newWPs });
-                                                    }}
-                                                />
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70">Planned Activities</h5>
-                                                    <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/10" onClick={() => {
-                                                        const newWPs = [...workPackagesArray];
-                                                        const activities = [...(wp.activities || [])];
-                                                        activities.push({ name: 'New Activity', description: '', leadPartner: '', estimatedBudget: 0 });
-                                                        newWPs[idx] = { ...wp, activities };
-                                                        handleUpdateProposal({ workPackages: newWPs });
-                                                    }}>
-                                                        <Plus className="h-4 w-4 mr-1" /> Add Activity
-                                                    </Button>
+                                        <CardContent className="px-8 pb-8 pt-0 animate-in slide-in-from-top-4 duration-300">
+                                            <div className="space-y-8">
+                                                <div className="p-6 bg-white/[0.02] rounded-2xl border border-white/5">
+                                                    <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-primary mb-4">Technical Objectives</h4>
+                                                    <textarea
+                                                        className="w-full bg-transparent border-none focus:ring-0 text-sm leading-relaxed text-muted-foreground resize-none min-h-[80px]"
+                                                        value={wp.description}
+                                                        onChange={(e) => {
+                                                            const newWPs = [...workPackagesArray];
+                                                            newWPs[idx] = { ...wp, description: e.target.value };
+                                                            handleUpdateProposal({ workPackages: newWPs });
+                                                        }}
+                                                    />
                                                 </div>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    {(Array.isArray(wp.activities) ? wp.activities : []).map((act: any, aIdx: number) => (
-                                                        <div key={aIdx} className="bg-white/5 rounded-2xl p-5 border border-white/5 space-y-3 hover:bg-white/10 transition-colors relative">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-xs font-mono text-primary/50">ACT {idx + 1}.{aIdx + 1}</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Input
-                                                                        type="number"
-                                                                        className="w-20 h-6 text-[10px] bg-black/40 border-none p-1 text-emerald-500 font-bold"
-                                                                        value={act.estimatedBudget || 0}
-                                                                        onChange={(e) => {
-                                                                            const newWPs = [...workPackagesArray];
-                                                                            const activities = [...wp.activities];
-                                                                            activities[aIdx] = { ...act, estimatedBudget: parseInt(e.target.value) || 0 };
-                                                                            newWPs[idx] = { ...wp, activities };
-                                                                            handleUpdateProposal({ workPackages: newWPs });
-                                                                        }}
-                                                                    />
-                                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive/30 hover:text-destructive" onClick={() => {
+
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-[10px] uppercase tracking-[0.2em] font-black text-primary">Planned Activities</h4>
+                                                        <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-widest gap-2 hover:bg-white/5 px-2 h-7" onClick={() => {
+                                                            const newWPs = [...workPackagesArray];
+                                                            const activities = [...(wp.activities || [])];
+                                                            activities.push({ name: 'New Activity', description: '', leadPartner: '', estimatedBudget: 0 });
+                                                            newWPs[idx] = { ...wp, activities };
+                                                            handleUpdateProposal({ workPackages: newWPs });
+                                                        }}>
+                                                            <Plus className="h-3 w-3" /> Add Activity
+                                                        </Button>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-3">
+                                                        {(wp.activities || []).map((act: any, aIdx: number) => (
+                                                            <div key={aIdx} className="p-5 bg-white/[0.03] rounded-2xl border border-white/5 hover:border-white/10 transition-colors relative overflow-hidden group/act">
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <span className="text-[9px] font-black font-mono text-primary bg-primary/10 px-2 py-0.5 rounded uppercase">Act {idx + 1}.{aIdx + 1}</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">€{act.estimatedBudget?.toLocaleString()}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <Input
+                                                                    className="text-sm font-bold bg-transparent border-none p-0 h-auto focus-visible:ring-0 mb-2"
+                                                                    value={act.name}
+                                                                    onChange={(e) => {
                                                                         const newWPs = [...workPackagesArray];
-                                                                        const activities = wp.activities.filter((_: any, i: number) => i !== aIdx);
+                                                                        const activities = [...wp.activities];
+                                                                        activities[aIdx] = { ...act, name: e.target.value };
                                                                         newWPs[idx] = { ...wp, activities };
                                                                         handleUpdateProposal({ workPackages: newWPs });
-                                                                    }}>
-                                                                        <Trash2 className="h-3 w-3" />
-                                                                    </Button>
-                                                                </div>
+                                                                    }}
+                                                                />
+                                                                <textarea
+                                                                    className="w-full bg-transparent border-none p-0 text-xs text-muted-foreground leading-relaxed focus:outline-none min-h-[40px] resize-none"
+                                                                    value={act.description}
+                                                                    onChange={(e) => {
+                                                                        const newWPs = [...workPackagesArray];
+                                                                        const activities = [...wp.activities];
+                                                                        activities[aIdx] = { ...act, description: e.target.value };
+                                                                        newWPs[idx] = { ...wp, activities };
+                                                                        handleUpdateProposal({ workPackages: newWPs });
+                                                                    }}
+                                                                />
                                                             </div>
-                                                            <Input
-                                                                className="font-bold text-white/90 bg-transparent border-none p-0 h-auto focus-visible:ring-0"
-                                                                value={act.name}
-                                                                onChange={(e) => {
-                                                                    const newWPs = [...workPackagesArray];
-                                                                    const activities = [...wp.activities];
-                                                                    activities[aIdx] = { ...act, name: e.target.value };
-                                                                    newWPs[idx] = { ...wp, activities };
-                                                                    handleUpdateProposal({ workPackages: newWPs });
-                                                                }}
-                                                            />
-                                                            <textarea
-                                                                className="w-full bg-transparent border-none p-0 text-xs text-muted-foreground leading-relaxed focus:outline-none min-h-[60px]"
-                                                                value={act.description}
-                                                                onChange={(e) => {
-                                                                    const newWPs = [...workPackagesArray];
-                                                                    const activities = [...wp.activities];
-                                                                    activities[aIdx] = { ...act, description: e.target.value };
-                                                                    newWPs[idx] = { ...wp, activities };
-                                                                    handleUpdateProposal({ workPackages: newWPs });
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    ))}
+                                                        ))}
+                                                        {(!wp.activities || wp.activities.length === 0) && (
+                                                            <div className="p-8 border-2 border-dashed border-white/5 rounded-2xl text-center">
+                                                                <p className="text-xs text-muted-foreground italic">No activities generated for this Work Package yet.</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </CardContent>
                                     )}
                                 </Card>
                             ))}
-                            <Button
-                                variant="outline"
-                                className="w-full border-dashed border-2 py-8 rounded-3xl flex flex-col gap-2 hover:bg-primary/5 transition-colors"
-                                onClick={() => {
-                                    const newWPs = [...workPackagesArray];
-                                    newWPs.push({ name: `WP${newWPs.length + 1}: New Work Package`, description: '', activities: [] });
-                                    handleUpdateProposal({ workPackages: newWPs });
-                                }}
-                            >
-                                <PlusCircle className="h-6 w-6 text-primary" />
-                                <span className="font-bold text-primary/70">Add New Work Package</span>
-                            </Button>
                         </div>
                     </div>
 
@@ -1010,7 +1091,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             </Tabs>
 
             {/* Consortium Management Dialog */}
-            <Dialog open={showConsortiumDialog} onOpenChange={setShowConsortiumDialog}>
+            < Dialog open={showConsortiumDialog} onOpenChange={setShowConsortiumDialog} >
                 <DialogContent className="max-w-4xl bg-secondary border-white/10 text-white rounded-3xl overflow-hidden p-0">
                     <div className="p-8 space-y-6">
                         <DialogHeader>
