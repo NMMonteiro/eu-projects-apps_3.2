@@ -103,17 +103,25 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
 
             const data = await response.json();
 
-            // 1. Enrich with Funding Scheme data if ID exists but object is missing
-            if (data.funding_scheme_id && !data.funding_scheme) {
+            // 1. Enrich with Funding Scheme data and Layout
+            if (data.funding_scheme_id) {
                 try {
                     const { data: scheme } = await supabase
                         .from('funding_schemes')
-                        .select('*')
+                        .select('*, funding_scheme_layouts(*)')
                         .eq('id', data.funding_scheme_id)
                         .single();
+
                     if (scheme) {
                         data.fundingScheme = scheme;
                         data.funding_scheme = scheme;
+
+                        // Find default layout or first layout
+                        const layout = scheme.funding_scheme_layouts?.find((l: any) => l.is_default) || scheme.funding_scheme_layouts?.[0];
+                        if (layout) {
+                            data.layout = layout;
+                            data.layout_id = layout.id;
+                        }
                     }
                 } catch (e) {
                     console.warn('Could not fetch linked funding scheme details', e);
@@ -121,7 +129,6 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             }
 
             // 2. HYDRATE PARTNERS (Critical for DOCX technical data)
-            // Even if partners are stored, they might be missing full technical metadata (OID, VAT, etc.)
             if (data.partners && data.partners.length > 0) {
                 try {
                     const partnerIds = data.partners.map((p: any) => p.id).filter(Boolean);

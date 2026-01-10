@@ -117,6 +117,8 @@ export interface FullProposal {
   technicalOverview?: TechnicalLayer[] | string;
 
   // Metadata
+  layoutId?: string;
+  layout?: { sequence: string[] };
   projectUrl?: string;
   selectedIdea?: Idea;
   generatedAt?: string;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Printer, Download, FileText, Building2, Clock, EuroIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { serverUrl, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase';
 import { toast } from 'sonner';
 import { FullProposal } from '../types/proposal';
 import {
@@ -36,6 +37,30 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                 });
                 if (!response.ok) throw new Error('Failed to load proposal');
                 const data = await response.json();
+
+                // Hydrate Funding Scheme and Layout for strict assembly
+                if (data.funding_scheme_id) {
+                    try {
+                        const { data: scheme } = await supabase
+                            .from('funding_schemes')
+                            .select('*, funding_scheme_layouts(*)')
+                            .eq('id', data.funding_scheme_id)
+                            .single();
+
+                        if (scheme) {
+                            data.fundingScheme = scheme;
+                            data.funding_scheme = scheme;
+                            const layout = scheme.funding_scheme_layouts?.find((l: any) => l.is_default) || scheme.funding_scheme_layouts?.[0];
+                            if (layout) {
+                                data.layout = layout;
+                                data.layout_id = layout.id;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch linked funding scheme details in summary', e);
+                    }
+                }
+
                 setProposal(data);
             } catch (error: any) {
                 console.error('Load error:', error);

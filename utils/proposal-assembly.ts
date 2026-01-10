@@ -11,7 +11,7 @@ export interface DisplaySection {
     isCustom?: boolean;
     isDivider?: boolean;
     charLimit?: number;
-    order?: number; // Added to respect absolute template sequence
+    order?: number; // Order index from layout
 }
 
 /**
@@ -44,58 +44,11 @@ function cleanTitle(title: string): string {
 }
 
 /**
- * ABSOLUTE FOUNDATION SEQUENCE (Used when template order is missing or ambiguous)
- * This aligns exactly with the user's reference PDF.
- */
-const FOUNDATION_PRIORITY: Record<string, number> = {
-    'context': 0,
-    'project_summary': 1,
-    'summary': 1.1,
-    'abstract': 1.2,
-    'relevance': 2,
-    'project_description': 2.1,
-    'needs_analysis': 2.2,
-    'partnership_arrangements': 3,
-    'partnership': 3.1,
-    'applicant_organisation': 3.2,
-    'participating_organisations': 3.3,
-    'impact': 4,
-    'project_design_implementation': 5,
-    'project_design': 5.1,
-    'work_packages_overview': 6,
-    'work_packages_and_activities': 6.1,
-};
-
-function getPriority(id: string, title?: string, templateOrder?: number): number {
-    // 1. Template order from DB is the ABSOLUTE authority
-    if (templateOrder !== undefined && templateOrder > 0) return templateOrder;
-
-    const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
-    const nk = normalize(id);
-    const nt = normalize(title || "");
-
-    // 2. Exact match in Foundation Priority
-    for (const [key, prio] of Object.entries(FOUNDATION_PRIORITY)) {
-        const pk = normalize(key);
-        if (nk === pk || (pk.length > 5 && (nk.includes(pk) || nt.includes(pk)))) {
-            return prio;
-        }
-    }
-
-    // 3. Work Packages (Start at 10 to ensure they follow Part B narrative)
-    if (nk.startsWith('wp') || nk.includes('workpackage')) {
-        const match = nk.match(/\d+/);
-        if (match) return 10 + (parseInt(match[0]) / 100);
-        return 10.9;
-    }
-
-    return 20; // Default: end of document
-}
-
-/**
- * Assembles a structured document following the Funding Scheme Template as the skeletal foundation.
+ * Assembles a structured document following the ULTIMATE Layout Foundation.
+ * This is the singular source of truth for sequencing.
  */
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
+    const layout = proposal.layout?.sequence || [];
     const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
     const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
     const workPackages = proposal.workPackages || (proposal as any).work_packages || [];
@@ -103,23 +56,74 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const sectionPool = new Map<string, DisplaySection>();
     const renderedWPIndices = new Set<number>();
 
-    // 1. ANCHOR: EXECUTIVE SUMMARY (Always required)
-    const summaryVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'] || dynamicSections['project_summary'];
-    sectionPool.set('summary', {
-        id: 'summary',
-        title: 'Executive Summary',
-        content: summaryVal,
-        level: 1,
-        order: 1
-    });
+    // --- ULTIMATE FALLBACK PRIORITY (If layout is missing or item is unlisted) ---
+    const FOUNDATION_PRIORITY: Record<string, number> = {
+        'context': 2,
+        'summary': 3,
+        'project_summary': 3,
+        'relevance': 4,
+        'project_description': 5,
+        'needs_analysis': 6,
+        'partnership_arrangements': 7,
+        'participating_organisations': 8,
+        'auto_partners': 8.1,
+        'auto_profiles': 8.2,
+        'impact': 100,
+        'project_design_implementation': 110,
+        'work_packages_overview': 120,
+        'wp_overview_injected': 120,
+        'auto_budget': 500,
+        'auto_risks': 510
+    };
 
-    // 2. SKELETON: FUNDING SCHEME TEMPLATE (Primary Source of truth)
+    // Helper to get priority from layout sequence
+    const getLayoutPriority = (key: string, title?: string, templateIdx?: number): number => {
+        const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
+        const nk = normalize(key);
+        const nt = normalize(title || "");
+
+        // 1. Primary: Explicit Layout Record
+        if (layout.length > 0) {
+            const idx = layout.findIndex(item => {
+                const ni = normalize(item);
+                return nk === ni || (ni.length > 5 && (nk.includes(ni) || nt.includes(ni)));
+            });
+            if (idx !== -1) return idx;
+        }
+
+        // 2. Secondary: Foundation Priority Map
+        if (FOUNDATION_PRIORITY[nk]) return FOUNDATION_PRIORITY[nk];
+
+        // 3. Tertiary: Template Array Order (if provided)
+        if (templateIdx !== undefined) return 200 + templateIdx;
+
+        // 4. Quaternary: Work Package logic
+        if (nk.includes('wp') || nk.includes('workpackage')) {
+            const wpNum = extractWPIndex(key) ?? extractWPIndex(title || '');
+            if (wpNum !== undefined) return 300 + wpNum;
+        }
+
+        return 1000; // Unlisted items go to the end
+    };
+
+    // 1. ANCHOR: EXECUTIVE SUMMARY (Always required at start if layout says so)
+    const summaryVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'] || dynamicSections['project_summary'];
+    if (summaryVal) {
+        sectionPool.set('summary', {
+            id: 'summary',
+            title: 'Executive Summary',
+            content: summaryVal,
+            level: 1,
+            order: getLayoutPriority('summary', 'Executive Summary')
+        });
+    }
+
+    // 2. SKELETON: FUNDING SCHEME TEMPLATE
     if (fundingScheme?.template_json?.sections) {
         const processSections = (sections: any[], level = 1) => {
-            sections.forEach(s => {
+            sections.forEach((s, sIdx) => {
                 const key = s.key || s.label.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
 
-                // Content lookup with fuzzy matching
                 let content = dynamicSections[s.key] || dynamicSections[key];
                 if (!content) {
                     const normLabel = s.label.toLowerCase().replace(/[\W_]/g, '');
@@ -131,7 +135,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     }
                 }
 
-                // Track WPs mentioned in template
                 const wpIdx = extractWPIndex(s.key || key) ?? extractWPIndex(s.label);
                 if (wpIdx !== undefined) renderedWPIndices.add(wpIdx);
 
@@ -143,7 +146,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     level: level,
                     wpIdx: wpIdx,
                     type: wpIdx !== undefined ? 'work_package' : s.type,
-                    order: s.order || getPriority(s.key || key, s.label)
+                    order: getLayoutPriority(s.key || key, s.label, sIdx)
                 });
 
                 if (s.subsections && s.subsections.length > 0) {
@@ -170,7 +173,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 level: 1,
                 wpIdx: wpIdx,
                 type: wpIdx !== undefined ? 'work_package' : undefined,
-                order: getPriority(key, key)
+                order: getLayoutPriority(key, key)
             });
         }
     });
@@ -186,32 +189,32 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 level: 2,
                 wpIdx: idx,
                 type: 'work_package',
-                order: 10 + (idx / 100)
+                order: getLayoutPriority(`work_package_${idx + 1}`, `Work Package ${idx + 1}`)
             });
         }
     });
 
-    // Participating Organizations, Profiles, Budget, Risks (Anchor at end or following structure)
+    // Structural Anchors
     if (proposal.partners?.length > 0) {
-        sectionPool.set('auto_partners', { id: 'auto_partners', title: 'Participating Organisations', level: 1, type: 'partners', order: 3.5 });
-        sectionPool.set('auto_profiles', { id: 'auto_profiles', title: 'Organisation Profiles & Capacity', level: 1, type: 'partner_profiles', order: 15 });
+        sectionPool.set('auto_partners', { id: 'auto_partners', title: 'Participating Organisations', level: 1, type: 'partners', order: getLayoutPriority('auto_partners') });
+        sectionPool.set('auto_profiles', { id: 'auto_profiles', title: 'Organisation Profiles & Capacity', level: 1, type: 'partner_profiles', order: getLayoutPriority('auto_profiles') });
     }
     if ((proposal.budget || []).length > 0) {
-        sectionPool.set('auto_budget', { id: 'auto_budget', title: 'Budget & Cost Estimation', level: 1, type: 'budget', order: 20 });
+        sectionPool.set('auto_budget', { id: 'auto_budget', title: 'Budget & Cost Estimation', level: 1, type: 'budget', order: getLayoutPriority('auto_budget') });
     }
     if ((proposal.risks || []).length > 0) {
-        sectionPool.set('auto_risks', { id: 'auto_risks', title: 'Risk Management & Mitigation', level: 1, type: 'risk', order: 21 });
+        sectionPool.set('auto_risks', { id: 'auto_risks', title: 'Risk Management & Mitigation', level: 1, type: 'risk', order: getLayoutPriority('auto_risks') });
     }
 
-    // 5. ASSEMBLE: Sort by the absolute order foundation
+    // 5. ASSEMBLE: Sort by ULTIMATE Layout Priority
     const finalDocument = Array.from(sectionPool.values()).sort((a, b) => {
-        const pA = a.order ?? getPriority(a.id, a.title);
-        const pB = b.order ?? getPriority(b.id, b.title);
-        if (pA !== pB) return pA - pB;
+        const orderA = a.order ?? 1000;
+        const orderB = b.order ?? 1000;
+        if (orderA !== orderB) return orderA - orderB;
         return 0;
     });
 
-    // 6. POLISH: Final Injection of WP Overview
+    // 6. POLISH: Inject "All Workpackages and activities" Overview
     const firstWPIdx = finalDocument.findIndex(s => s.type === 'work_package');
     const hasOverview = finalDocument.some(s => s.type === 'wp_list' || s.title.toLowerCase().includes('overview'));
 
@@ -221,7 +224,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             title: 'All Workpackages and activities',
             level: 1,
             type: 'wp_list',
-            order: 9.99 // Force it right before individual WPs
+            order: getLayoutPriority('work_packages_overview')
         });
     }
 
