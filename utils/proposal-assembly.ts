@@ -38,6 +38,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const renderedKeys = new Set<string>();
     const renderedWPIndices = new Set<number>();
     let wpOverviewInserted = false;
+    let lastWPRelevantIndex = -1;
     let lastWPLevel = 2;
 
     // 1. Executive Summary (Always First)
@@ -50,7 +51,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
     // 2. Main Narrative (Strict Template Order)
     if (fundingScheme?.template_json?.sections) {
-        const processTemplate = (sections: any[], level = 1) => {
+        const processTemplate = (sections: any[], level = 1, isInsideWP = false) => {
             [...sections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
                 const key = ts.key || ts.label.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
 
@@ -103,12 +104,20 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                             type: 'wp_list'
                         });
                         wpOverviewInserted = true;
+                        lastWPRelevantIndex = finalDocument.length - 1;
                     }
                 }
 
+                let displayTitle = cleanTitle(ts.label);
+                if (isWP && wpIdx !== undefined && workPackages[wpIdx]?.name) {
+                    displayTitle = `WP${wpIdx + 1}: ${workPackages[wpIdx].name}`;
+                }
+
+                const currentIsInsideWP = isInsideWP || isWP;
+
                 finalDocument.push({
                     id: ts.key || key,
-                    title: cleanTitle(ts.label),
+                    title: displayTitle,
                     content: content,
                     description: ts.description,
                     type: (isWP && wpIdx !== undefined) ? 'work_package' : ts.type,
@@ -116,8 +125,12 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     wpIdx: wpIdx
                 });
 
+                if (currentIsInsideWP) {
+                    lastWPRelevantIndex = finalDocument.length - 1;
+                }
+
                 if (ts.subsections && ts.subsections.length > 0) {
-                    processTemplate(ts.subsections, level + 1);
+                    processTemplate(ts.subsections, level + 1, currentIsInsideWP);
                 }
             });
         };
@@ -165,11 +178,9 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
     if (allWPIndices.size > 0 && (renderedWPIndices.size < allWPIndices.size || !wpOverviewInserted)) {
 
-        // Find position of the LAST WP/WP-List section rendered
         let insertIndex = finalDocument.length;
-        const lastWPPos = [...finalDocument].reverse().findIndex(s => s.type === 'work_package' || s.type === 'wp_list');
-        if (lastWPPos !== -1) {
-            insertIndex = finalDocument.length - lastWPPos;
+        if (lastWPRelevantIndex !== -1) {
+            insertIndex = lastWPRelevantIndex + 1;
         }
 
         const extras: DisplaySection[] = [];
@@ -191,7 +202,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 extras.push({
                     id: `wp_${idx + 1}_auto`,
-                    title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
+                    title: cleanTitle(wp.name ? `WP${idx + 1}: ${wp.name}` : `Work Package ${idx + 1}`),
                     content: narrative,
                     type: 'work_package',
                     level: lastWPLevel,
