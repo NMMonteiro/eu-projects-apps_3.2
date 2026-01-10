@@ -59,7 +59,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const finalDocument: DisplaySection[] = [];
     const renderedKeys = new Set<string>();
     const renderedWPIndices = new Set<number>();
-    let wpOverviewInserted = false;
     let lastWPRelevantIndex = -1;
     let lastWPLevel = 2;
 
@@ -106,31 +105,16 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 // Identify if this is a Work Package section
                 const isWP = ts.type === 'work_package' ||
-                    ts.label.toLowerCase().includes('work package') ||
-                    ts.label.toLowerCase().includes('workplan') ||
-                    ts.label.toLowerCase().includes('work plan') ||
-                    ts.label.toLowerCase().includes('tasks') ||
-                    key.includes('workpackage') ||
-                    key.includes('workplan') ||
-                    key.includes('tasks');
+                    ((ts.label.toLowerCase().includes('work package') ||
+                        ts.label.toLowerCase().includes('workplan') ||
+                        ts.label.toLowerCase().includes('tasks')) && !isInsideWP);
 
                 let wpIdx: number | undefined = extractWPIndex(ts.key || key) ?? extractWPIndex(ts.label);
 
-                if (isWP || wpIdx !== undefined) {
+                if ((isWP || wpIdx !== undefined) && !isInsideWP) {
                     lastWPLevel = level;
                     if (wpIdx !== undefined) {
                         renderedWPIndices.add(wpIdx);
-                    }
-
-                    // Insert the Master Overview at the FIRST WP-related section found in template
-                    if (!wpOverviewInserted) {
-                        finalDocument.push({
-                            id: 'wp_master_list',
-                            title: 'Work Package Overview',
-                            level: level,
-                            type: 'wp_list'
-                        });
-                        wpOverviewInserted = true;
                     }
                 }
 
@@ -144,13 +128,16 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 const currentIsInsideWP = isInsideWP || isWP;
 
+                // Only the main WP section should trigger structured data view to avoid duplication
+                const isMainWP = isWP && !isInsideWP;
+
                 finalDocument.push({
                     id: ts.key || key,
                     title: displayTitle,
                     content: content,
                     description: ts.description,
-                    type: (isWP && wpIdx !== undefined) ? 'work_package' : ts.type,
-                    level: level,
+                    type: (isMainWP && wpIdx !== undefined) ? 'work_package' : ts.type,
+                    level: isMainWP ? 2 : level, // Force all main WPs to level 2 to keep them as siblings
                     wpIdx: wpIdx
                 });
 
@@ -158,11 +145,19 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     const lowLabel = ts.label.toLowerCase();
                     const lowKey = (ts.key || "").toLowerCase();
 
-                    // Suppress redundant boilerplate containers
+                    // Suppress boilerplate containers but MERGE their content into parent WP
                     if (lowLabel.startsWith('activities') ||
                         lowLabel.includes('description of') ||
                         lowKey.includes('activities_description') ||
                         lowKey.endsWith('_activities')) {
+
+                        if (lastWPRelevantIndex !== -1 && content && finalDocument[lastWPRelevantIndex]) {
+                            const parent = finalDocument[lastWPRelevantIndex];
+                            // Avoid double-merging if content is same
+                            if (!parent.content?.includes(content.substring(0, 50))) {
+                                parent.content = (parent.content || "") + "\n\n" + content;
+                            }
+                        }
 
                         // Mark this and all children as rendered to avoid leftovers
                         const markRendered = (sArr: any[]) => {
@@ -176,9 +171,14 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                         renderedKeys.add(ts.key);
                         renderedKeys.add(key);
                         if (ts.subsections) markRendered(ts.subsections);
+
+                        // Remove the boilerplate header we just pushed
+                        finalDocument.pop();
                         return;
                     }
-                    lastWPRelevantIndex = finalDocument.length - 1;
+                    if (isMainWP) {
+                        lastWPRelevantIndex = finalDocument.length - 1;
+                    }
                 }
 
                 if (ts.subsections && ts.subsections.length > 0) {
@@ -229,7 +229,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    if (allWPIndices.size > 0 && (renderedWPIndices.size < allWPIndices.size || !wpOverviewInserted)) {
+    if (allWPIndices.size > 0 && (renderedWPIndices.size < allWPIndices.size)) {
 
         let insertIndex = finalDocument.length;
         if (lastWPRelevantIndex !== -1) {
@@ -237,12 +237,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
 
         const extras: DisplaySection[] = [];
-
-        // If Overview wasn't in template, add it now at the head of the extras
-        if (!wpOverviewInserted) {
-            extras.push({ id: 'wp_master_list_auto', title: 'Work Package Overview', level: 1, type: 'wp_list' });
-            wpOverviewInserted = true;
-        }
 
         // Add remaining WPs in order
         Array.from(allWPIndices).sort((a, b) => a - b).forEach((idx: number) => {
@@ -258,7 +252,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     title: cleanTitle(wp.name ? `WP${idx + 1}: ${wp.name}` : `Work Package ${idx + 1}`),
                     content: narrative,
                     type: 'work_package',
-                    level: lastWPLevel,
+                    level: 2, // Always flatten leftovers to level 2
                     wpIdx: idx
                 });
                 renderedWPIndices.add(idx);
