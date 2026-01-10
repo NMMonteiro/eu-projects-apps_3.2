@@ -36,7 +36,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [generatingSection, setGeneratingSection] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'structured' | 'narrative' | 'settings'>('structured');
+    const [activeTab, setActiveTab] = useState<'structured' | 'narrative' | 'legacy' | 'settings'>('narrative');
     const [expandedWp, setExpandedWp] = useState<number | null>(0);
     const [fundingScheme, setFundingScheme] = useState<any>(null);
 
@@ -167,14 +167,19 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         const newBudget = [...(proposal?.budget || [])];
         const item = { ...newBudget[budgetIdx] };
         const breakdown = [...(item.breakdown || [])];
-        breakdown[breakdownIdx] = { ...breakdown[breakdownIdx], ...updates };
 
-        // Auto-calculate sub-total if quantity or unitCost changed
-        if (updates.quantity !== undefined || updates.unitCost !== undefined) {
-            const q = updates.quantity ?? breakdown[breakdownIdx].quantity;
-            const u = updates.unitCost ?? breakdown[breakdownIdx].unitCost;
-            breakdown[breakdownIdx].total = q * u;
+        // Handle potential AI field name variations (cost vs unitCost)
+        const currentSubItem = { ...breakdown[breakdownIdx] };
+        if (currentSubItem.cost !== undefined && currentSubItem.unitCost === undefined) {
+            currentSubItem.unitCost = currentSubItem.cost;
         }
+
+        breakdown[breakdownIdx] = { ...currentSubItem, ...updates };
+
+        // Auto-calculate sub-total
+        const q = parseFloat(breakdown[breakdownIdx].quantity) || 0;
+        const u = parseFloat(breakdown[breakdownIdx].unitCost) || 0;
+        breakdown[breakdownIdx].total = q * u;
 
         item.breakdown = breakdown;
         // Recalculate main cost
@@ -285,22 +290,38 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     };
 
     const dynamicSections = proposal.dynamic_sections || proposal.dynamicSections || {};
-    const templateSections = fundingScheme?.template_json?.sections
-        ? getFlattenedSections(fundingScheme.template_json.sections)
-        : [];
 
-    // Create a set of keys already in the template to avoid duplicates
+    // Explicit sections that MUST be visible if they exist in dynamicSections
+    const standardKeys = [
+        { key: 'context', label: 'Context', level: 0 },
+        { key: 'project_summary', label: 'Project Summary', level: 0 },
+        { key: 'relevance', label: 'Relevance', level: 0 },
+        { key: 'partnership_arrangements', label: 'Partnership Arrangements', level: 0 },
+        { key: 'impact', label: 'Impact', level: 0 },
+        { key: 'project_design_implementation', label: 'Project Design & Implementation', level: 0 }
+    ];
+
+    let templateSections = fundingScheme?.template_json?.sections
+        ? getFlattenedSections(fundingScheme.template_json.sections)
+        : standardKeys;
+
     const templateKeys = new Set((templateSections || []).map(s => s.key));
+
+    // Ensure all standard keys that HAVE content are included even if not in template
+    standardKeys.forEach(s => {
+        if (!templateKeys.has(s.key) && dynamicSections[s.key]) {
+            templateSections.push(s);
+            templateKeys.add(s.key);
+        }
+    });
+
     const templateWPKeys = new Set(templateSections
         .filter(s => s.label?.toLowerCase().includes('work package') || s.key.includes('wp'))
         .map(s => s.key));
 
-    // Find extra sections in dynamicSections that are NOT in the template
-    // AND are not redundant work package sections
     const extraSections = Object.keys(dynamicSections || {})
         .filter(key => {
             if (templateKeys.has(key)) return false;
-            // Prevent duplication of Work Packages if template already has them
             if (key.startsWith('work_package_') && templateWPKeys.size > 0) return false;
             return true;
         })
@@ -358,18 +379,18 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             {/* Main Tabs */}
             <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
                 <div className="flex items-center justify-center mb-8">
-                    <TabsList className="bg-secondary/40 p-1 rounded-2xl border border-white/5 backdrop-blur-lg">
-                        <TabsTrigger value="structured" className="rounded-xl px-8 py-2.5 data-[state=active]:bg-primary data-[state=active]:shadow-lg flex gap-2 font-bold transition-all duration-300">
-                            <Layout className="h-4 w-4" />
-                            Project Design
-                        </TabsTrigger>
-                        <TabsTrigger value="narrative" className="rounded-xl px-8 py-2.5 data-[state=active]:bg-primary data-[state=active]:shadow-lg flex gap-2 font-bold transition-all duration-300">
-                            <FileText className="h-4 w-4" />
+                    <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl">
+                        <TabsTrigger value="narrative" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                             Narrative Structure
                         </TabsTrigger>
-                        <TabsTrigger value="settings" className="rounded-xl px-8 py-2.5 data-[state=active]:bg-primary data-[state=active]:shadow-lg flex gap-2 font-bold transition-all duration-300">
-                            <Settings className="h-4 w-4" />
-                            Configuration
+                        <TabsTrigger value="structured" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                            Interative Editor
+                        </TabsTrigger>
+                        <TabsTrigger value="legacy" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                            Full Report (Legacy View)
+                        </TabsTrigger>
+                        <TabsTrigger value="settings" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                            Settings
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -844,7 +865,35 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 </TabsContent>
 
                 {/* Settings Tab */}
-                <TabsContent value="settings" className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <TabsContent value="legacy" className="mt-0">
+                    <Card className="bg-white p-12 rounded-[32px] shadow-2xl text-black min-h-[1000px] border-none">
+                        <div className="max-w-4xl mx-auto space-y-12">
+                            <div className="border-b-4 border-black pb-8">
+                                <h1 className="text-5xl font-black uppercase tracking-tighter mb-4">{proposal.title}</h1>
+                                <p className="text-xl italic text-gray-600">Funding Proposal Report</p>
+                            </div>
+
+                            {expectedSections.map((s) => (
+                                <section key={s.key} className="space-y-6">
+                                    <h2 className="text-3xl font-black uppercase border-b-2 border-gray-200 pb-2 flex items-center gap-4">
+                                        <span className="text-gray-300">#</span>
+                                        {s.label}
+                                    </h2>
+                                    {dynamicSections[s.key] ? (
+                                        <div
+                                            className="prose prose-lg max-w-none prose-headings:font-black prose-headings:uppercase prose-p:leading-relaxed"
+                                            dangerouslySetInnerHTML={{ __html: dynamicSections[s.key] }}
+                                        />
+                                    ) : (
+                                        <p className="text-gray-400 italic">No content generated for this section.</p>
+                                    )}
+                                </section>
+                            ))}
+                        </div>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="settings" className="mt-0 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <Card className="bg-secondary/10 border-white/5 rounded-[40px] p-12 overflow-hidden relative shadow-2xl">
                         <div className="absolute top-0 right-0 h-32 w-32 bg-primary/20 blur-[100px] -mr-16 -mt-16 rounded-full"></div>
                         <div className="space-y-8 relative">
