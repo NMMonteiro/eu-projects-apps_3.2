@@ -50,25 +50,42 @@ const ProposalSummaryPageWrapper = () => {
 
 function App() {
     return (
-        <BrowserRouter>
-            <Toaster position="top-right" theme="dark" />
-            <Routes>
-                <Route element={<Layout />}>
-                    <Route path="/" element={<ProposalGeneratorWrapper />} />
-                    <Route path="/funding" element={<FundingSearchPageSimple />} />
-                    <Route path="/funding-hybrid" element={<FundingSearchHybrid />} />
-                    <Route path="/partners" element={<PartnersPageWrapper />} />
-                    <Route path="/partners/:id" element={<PartnerEditPageWrapper />} />
-                    <Route path="/saved" element={<SavedProposalsPageWrapper />} />
-                    <Route path="/proposals/:id" element={<ProposalViewerPageWrapper />} />
-                    <Route path="/proposals/:id/summary" element={<ProposalSummaryPageWrapper />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/admin/funding-schemes" element={<FundingSchemeAdminPage />} />
-                    <Route path="/test-export" element={<TestExportPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
-            </Routes>
-        </BrowserRouter>
+        <>
+            <div style={{
+                backgroundColor: '#ef4444',
+                color: 'white',
+                padding: '4px',
+                textAlign: 'center',
+                fontWeight: 'bold',
+                fontSize: '10px',
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 9999
+            }}>
+                BUILD V3.5 - ULTRA - HARD REFRESH RECOMMENDED (CTRL+F5)
+            </div>
+            <BrowserRouter>
+                <Toaster position="top-right" theme="dark" />
+                <Routes>
+                    <Route element={<Layout />}>
+                        <Route path="/" element={<ProposalGeneratorWrapper />} />
+                        <Route path="/funding" element={<FundingSearchPageSimple />} />
+                        <Route path="/funding-hybrid" element={<FundingSearchHybrid />} />
+                        <Route path="/partners" element={<PartnersPageWrapper />} />
+                        <Route path="/partners/:id" element={<PartnerEditPageWrapper />} />
+                        <Route path="/saved" element={<SavedProposalsPageWrapper />} />
+                        <Route path="/proposals/:id" element={<ProposalViewerPageWrapper />} />
+                        <Route path="/proposals/:id/summary" element={<ProposalSummaryPageWrapper />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/admin/funding-schemes" element={<FundingSchemeAdminPage />} />
+                        <Route path="/test-export" element={<TestExportPage />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Route>
+                </Routes>
+            </BrowserRouter>
+        </>
     );
 }
 
