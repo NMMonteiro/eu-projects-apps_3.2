@@ -62,65 +62,95 @@ const getFileManager = () => {
 const saveToSupabase = async (proposal: any) => {
     try {
         const supabase = getSupabaseClient();
+        const pid = proposal.id;
 
-        // Map JS camelCase to Postgres snake_case
+        // 1. Basic Metadata (The 'proposals' table)
         const dbProposal: any = {
             title: proposal.title || 'Untitled Proposal',
             summary: proposal.summary,
-            relevance: proposal.relevance,
-            methods: proposal.methods || proposal.methodology,
-            impact: proposal.impact,
-            introduction: proposal.introduction,
-            objectives: proposal.objectives,
-            methodology: proposal.methodology || proposal.methods,
-            expected_results: proposal.expected_results || proposal.expectedResults,
-            innovation: proposal.innovation,
-            sustainability: proposal.sustainability,
-            consortium: proposal.consortium || proposal.consortium_description,
-            work_plan: proposal.workPlan || proposal.work_plan,
-            risk_management: proposal.riskManagement || proposal.risk_management,
-            dissemination: proposal.dissemination,
-            partners: proposal.partners || [],
-            work_packages: proposal.workPackages || [],
-            milestones: proposal.milestones || [],
-            risks: proposal.risks || [],
-            budget: proposal.budget || [],
-            timeline: proposal.timeline || [],
-            technical_overview: proposal.technicalOverview || proposal.technical_overview,
             project_url: proposal.projectUrl || proposal.project_url,
             selected_idea: proposal.selectedIdea,
             settings: proposal.settings || {},
             generated_at: proposal.generatedAt,
             saved_at: proposal.savedAt || new Date().toISOString(),
-            updated_at: proposal.updatedAt || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
             funding_scheme_id: proposal.funding_scheme_id,
-            dynamic_sections: proposal.dynamic_sections || proposal.dynamicSections
+            // Keep JSONB as cache/backup for now
+            dynamic_sections: proposal.dynamic_sections || proposal.dynamicSections || {},
+            work_packages: proposal.workPackages || proposal.work_packages || [],
+            budget: proposal.budget || [],
+            risks: proposal.risks || [],
+            partners: proposal.partners || []
         };
 
-        // If ID is not a UUID, let Supabase generate one or use the string if it's compatible
-        // But for consistency with KV, we'll try to use a UUID if possible
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(proposal.id);
-
-        if (isUuid) {
-            dbProposal.id = proposal.id;
-        }
-
-        const { data, error } = await supabase
+        const { data: savedProp, error: propError } = await supabase
             .from('proposals')
-            .upsert(dbProposal, { onConflict: 'id' })
+            .upsert({ ...dbProposal, id: pid }, { onConflict: 'id' })
             .select()
             .single();
 
-        if (error) {
-            console.error('Failed to sync to Supabase proposals table:', error.message);
-            return null;
+        if (propError) {
+            console.warn('Proposals table upsert failed (likely missing new schema):', propError.message);
+            // Non-critical fallback
         }
 
-        console.log('Successfully synced proposal to Supabase table:', data.id);
-        return data.id;
-    } catch (e) {
-        console.error('Error in saveToSupabase:', e);
-        return null;
+        // 2. Relational Narrative Sections
+        const dynamicSections = proposal.dynamic_sections || proposal.dynamicSections || {};
+        const sectionsToInsert = Object.entries(dynamicSections).map(([key, val]) => ({
+            proposal_id: pid,
+            section_key: key,
+            content: val as string,
+            label: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        }));
+
+        if (proposal.summary) {
+            sectionsToInsert.push({
+                proposal_id: pid,
+                section_key: 'summary',
+                content: proposal.summary,
+                label: 'Executive Summary'
+            });
+        }
+
+        if (sectionsToInsert.length > 0) {
+            const { error: sError } = await supabase.from('proposal_sections').upsert(sectionsToInsert, { onConflict: 'proposal_id,section_key' });
+            if (sError) console.warn('Relational Sections sync failed:', sError.message);
+        }
+
+        // 3. Relational Partners
+        const partners = proposal.partners || [];
+        if (partners.length > 0) {
+            const partnersToInsert = partners.map((p: any, idx: number) => ({
+                proposal_id: pid,
+                partner_id: p.id && p.id.length > 30 ? p.id : null,
+                name: p.name,
+                role: p.role || 'Partner',
+                is_coordinator: !!p.isCoordinator,
+                description: p.description,
+                order_index: idx
+            }));
+            const { error: pError } = await supabase.from('proposal_partners').upsert(partnersToInsert, { onConflict: 'proposal_id,partner_id' });
+            if (pError) console.warn('Relational Partners sync failed:', pError.message);
+        }
+
+        // 4. Relational Work Packages
+        const wps = proposal.workPackages || proposal.work_packages || [];
+        if (wps.length > 0) {
+            const wpsToInsert = wps.map((wp: any, idx: number) => ({
+                proposal_id: pid,
+                name: wp.name || `Work Package ${idx + 1}`,
+                description: wp.description,
+                duration: wp.duration || wp.timeline,
+                order_index: idx,
+                activities: wp.activities || []
+            }));
+            await supabase.from('proposal_work_packages').delete().eq('proposal_id', pid);
+            await supabase.from('proposal_work_packages').insert(wpsToInsert);
+        }
+
+        console.log(`✅ Relational Sync Attempted for Proposal: ${pid}`);
+    } catch (err: any) {
+        console.error('❌ Supabase Relational Sync Error:', err.message);
     }
 };
 
@@ -695,10 +725,61 @@ Return ONLY valid JSON, no other text.`;
             );
         }
 
-        // GET /proposals/:id - Get single
+        // GET /proposals/:id - Get single (Enhanced for Relational Loading)
         if (path.match(/\/proposals\/[^\/]+$/) && req.method === 'GET') {
             const id = path.split('/').pop();
-            const proposal = await KV.get(id!);
+            let proposal = await KV.get(id!);
+
+            // Hybrid Load: Try Relational DB first for the most up-to-date structured data
+            try {
+                const supabase = getSupabaseClient();
+                const { data: dbProp, error: dbError } = await supabase.from('proposals').select(`
+                    *,
+                    sections:proposal_sections(*),
+                    rel_partners:proposal_partners(*),
+                    rel_work_packages:proposal_work_packages(*),
+                    rel_budget:proposal_budget_items(*),
+                    rel_risks:proposal_risks(*),
+                    fundingScheme:funding_schemes(*)
+                `).eq('id', id).single();
+
+                if (dbProp && !dbError) {
+                    console.log(`💎 Loaded relational data for ${id}`);
+                    // Reconstruct the proposal object
+                    const dynamic_sections: any = {};
+                    dbProp.sections?.forEach((s: any) => {
+                        dynamic_sections[s.section_key] = s.content;
+                    });
+
+                    proposal = {
+                        ...proposal,
+                        ...dbProp,
+                        dynamicSections: dynamic_sections,
+                        dynamic_sections: dynamic_sections,
+                        partners: dbProp.rel_partners?.map((p: any) => ({
+                            id: p.partner_id,
+                            name: p.name,
+                            role: p.role,
+                            isCoordinator: p.is_coordinator,
+                            description: p.description
+                        })) || dbProp.partners,
+                        workPackages: dbProp.rel_work_packages?.map((w: any) => ({
+                            name: w.name,
+                            description: w.description,
+                            duration: w.duration,
+                            activities: w.activities
+                        })) || dbProp.work_packages,
+                        budget: dbProp.rel_budget?.map((b: any) => ({
+                            category: b.item_category,
+                            description: b.description,
+                            cost: b.cost,
+                            subItems: b.breakdown
+                        })) || dbProp.budget
+                    };
+                }
+            } catch (err) {
+                console.error('Relational Load Error (Falling back to KV/JSONB):', err);
+            }
 
             if (!proposal) {
                 return new Response(
