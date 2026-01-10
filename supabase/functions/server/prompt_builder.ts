@@ -209,48 +209,52 @@ export function buildProposalPrompt(
   const personnelBudget = Math.floor(budgetNum * 0.6);
   const operationalBudget = Math.floor(budgetNum * 0.4);
 
-  const partnerDictionary = partners.map(p => `[PARTNER: "${p.name}"] 
+  const partnerDictionary = partners.map((p, i) => `[PARTNER ${i + 1}]: "${p.name}" 
    - Acronym: ${p.acronym || 'N/A'}
-   - Role: ${p.isCoordinator ? 'Lead Coordinator' : 'Technical Partner'}
+   - Role: ${p.isCoordinator ? 'LEAD COORDINATOR (APPLICANT)' : 'Technical Partner'}
    - Profile: ${p.description || 'No description provided'}
    - Expertise: ${p.experience || 'No expertise provided'}`).join('\n\n');
 
   const sectionInstructions = allSections.map((s, i) => {
-    return `SECTION [${i + 1}]: ${s.label}
+    return `SECTION: ${s.label}
     KEY: "${s.key}"
-    DESC: ${s.description}
-    AI PROMPT: ${s.aiPrompt || 'Write a technical narrative.'}
-    REQUIRED: Return content in "dynamicSections["${s.key}"]".`;
+    REQUIRED PROMPT: ${s.aiPrompt || 'Detailed technical narrative.'}`;
   }).join('\n\n');
 
-  return `You are a professional EU grant writer. Your task is to generate a HIGH-QUALITY proposal for the following project.
+  return `You are an elite EU grant writing expert. You are generating a FINAL SUBMISSION.
 
-PROJECT IDEA:
+PROJECT:
 Title: ${idea.title}
-Description: ${idea.description}
+Summary: ${idea.description}
 
-CONSORTIUM PARTNERS (MANDATORY - USE ONLY THESE NAMES):
+CONSORTIUM (MANDATORY - YOU MUST USE ALL ${partners.length} ORGANIZATIONS):
 ${partnerDictionary}
 
-BUDGET CONSTRAINTS:
-- TOTAL BUDGET: ${finalBudgetStr} (${budgetNum})
-- CRITICAL: Use ONLY large integers for all "cost" and "amount" fields. NO DECIMALS (e.g. use 45000, not 4.5).
+BUDGET:
+Total: ${finalBudgetStr} (${budgetNum} EUR)
+Rule: Use LARGE INTEGERS for all numeric fields.
 
-STRUCTURE TO FOLLOW:
-${sectionInstructions}
+WORK PACKAGES:
+- Generate 5-6 detailed Work Packages.
+- EVERY Work Package MUST have 3+ activities.
+- EVERY activity must specify a Lead Partner from the consortium above.
 
-STRICT OUTPUT RULES:
-1. **NO HALLUCINATIONS**: Do NOT include partners not listed above (e.g. No "Science Box", No "ILT").
-2. **ALL SECTIONS**: You MUST fill "dynamicSections" for EVERY key provided in the template above.
-3. **PARTNER ROLES**: In "partnership_arrangements", explain precisely how these SPECIFIC partners work together.
-4. **JSON ONLY**: Return ONLY a valid JSON object.
-5. **NARRATIVE CONTENT**: Use professional HTML (H3, P, UL, LI) within section values.
+OUTPUT MAPPING RULE:
+1. "dynamicSections": For every Work Package X (1,2,3...), create an entry with key "work_package_X".
+2. "workPackages": For every Work Package, add a structured entry in this array.
+3. BOTH must exist or the proposal is incomplete.
 
-OUTPUT JSON FORMAT:
+STRICT JSON OUTPUT RULES:
+1. **PARTNER COUNT**: The "partners" array MUST have EXACTLY ${partners.length} entries. 
+2. **COORDINATOR**: You MUST include the Lead Coordinator ("${partners[0]?.name}") as the first partner in the "partners" list.
+3. **NO HALLUCINATIONS**: Use ONLY the partner names provided.
+4. **HTML CONTENT**: "dynamicSections" values must be rich HTML (H3, H4, P, UL, LI).
+
+EXAMPLE JSON (FOLLOW EXACTLY):
 {
   "title": "${idea.title}",
   "partners": [
-    ${partners.map(p => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Project Coordinator' : 'Partner'}", "isCoordinator": ${p.isCoordinator || false}, "description": "Profile based on provided expertise..." }`).join(',\n    ')}
+    ${partners.map(p => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Project Coordinator' : 'Partner'}", "isCoordinator": ${p.isCoordinator || false}, "description": "3-sentence professional bio..." }`).join(',\n    ')}
   ],
   "workPackages": [
     {
@@ -258,27 +262,52 @@ OUTPUT JSON FORMAT:
       "description": "...",
       "duration": "M1-M24",
       "activities": [
-        { "name": "...", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} }
+        { "name": "Financial Coordination", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} },
+        { "name": "Quality Monitoring", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
       ],
-      "deliverables": []
+      "deliverables": ["Grant Agreement", "Management Plan"]
+    },
+    {
+      "name": "WP2: Needs Analysis",
+      "description": "...",
+      "duration": "M1-M6",
+      "activities": [
+        { "name": "Survey Design", "description": "...", "leadPartner": "${partners[1]?.name || partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.2)} }
+      ],
+      "deliverables": ["Consolidated Needs Report"]
     }
   ],
   "budget": [
     {
       "item": "Personnel",
       "cost": ${personnelBudget},
+      "description": "Implementation staff.",
       "breakdown": [{ "subItem": "Staff", "quantity": 1, "unitCost": ${personnelBudget}, "total": ${personnelBudget} }],
       "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
+    },
+    {
+      "item": "Travel & Subsistence",
+      "cost": ${operationalBudget},
+      "description": "Travel for meetings.",
+      "breakdown": [{ "subItem": "Flights", "quantity": 1, "unitCost": ${operationalBudget}, "total": ${operationalBudget} }],
+      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor(operationalBudget / partners.length)} }`).join(', ')}]
     }
   ],
   "risks": [{ "risk": "...", "likelihood": "...", "impact": "...", "mitigation": "..." }],
-  "summary": "Full project summary HTML...",
+  "summary": "HTML summary...",
   "dynamicSections": {
-    "section_key": "Full technical content based on AI PROMPT instructions..."
+    "context": "...narrative...",
+    "project_summary": "...narrative...",
+    "work_package_1": "...WP1 narrative...",
+    "work_package_2": "...WP2 narrative...",
+    "work_package_3": "...WP3 narrative...",
+    "work_package_4": "...WP4 narrative...",
+    "work_package_5": "...WP5 narrative..."
   }
 }
 
 Return ONLY valid JSON.`;
 }
+
 
 

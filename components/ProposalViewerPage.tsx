@@ -303,6 +303,12 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         { key: 'work_package_2', label: 'WP2: Development', level: 0 },
         { key: 'work_package_3', label: 'WP3: Implementation', level: 0 },
         { key: 'work_package_4', label: 'WP4: Dissemination', level: 0 },
+        { key: 'work_package_5', label: 'WP5: Evaluation', level: 0 },
+        { key: 'work_package_6', label: 'WP6: Sustainability', level: 0 },
+        { key: 'work_package_7', label: 'WP7: Impact', level: 0 },
+        { key: 'work_package_8', label: 'WP8: Additional', level: 0 },
+        { key: 'work_package_9', label: 'WP9: Additional', level: 0 },
+        { key: 'work_package_10', label: 'WP10: Additional', level: 0 },
         { key: 'eu_values', label: 'EU Values', level: 0 }
     ];
 
@@ -327,7 +333,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const extraSections = Object.keys(dynamicSections || {})
         .filter(key => {
             if (templateKeys.has(key)) return false;
-            if (key.startsWith('work_package_') && templateWPKeys.size > 0) return false;
+            // Only hide work_package_X if it's EXACTLY in templateKeys (already handled above)
             return true;
         })
         .map(key => ({
@@ -929,19 +935,51 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                             ))}
 
                             {/* Partner List Summary in Report */}
-                            <section className="space-y-6 pt-12 border-t-4 border-gray-100">
-                                <h2 className="text-3xl font-black uppercase border-b-2 border-black pb-4">Appendix A: Consortium Members</h2>
-                                <div className="grid grid-cols-1 gap-4">
+                            <section className="space-y-8 pt-12 border-t-8 border-black">
+                                <h2 className="text-4xl font-black uppercase border-b-4 border-black pb-4">Appendix A: Consortium Members</h2>
+                                <p className="text-sm italic text-gray-500 mb-8">Verification of all selected partners included in this proposal draft.</p>
+                                <div className="grid grid-cols-1 gap-6">
                                     {partnersArray.map((p: any, i: number) => (
-                                        <div key={i} className="flex gap-6 items-start p-6 bg-gray-50 rounded-2xl">
-                                            <div className="h-10 w-10 bg-black text-white flex items-center justify-center font-bold text-xs">{i + 1}</div>
-                                            <div>
-                                                <p className="font-black uppercase text-sm mb-1">{p.name}</p>
-                                                <p className="text-xs text-gray-500 italic mb-2">{p.isCoordinator ? 'Project Lead' : 'Partner'}</p>
-                                                <p className="text-xs leading-relaxed text-gray-600">{p.description}</p>
+                                        <div key={i} className="flex gap-8 items-start p-8 bg-gray-50 rounded-[32px] border-2 border-gray-100 group hover:border-black transition-colors">
+                                            <div className="h-16 w-16 bg-black text-white flex items-center justify-center font-black text-2xl rounded-2xl shrink-0 group-hover:scale-110 transition-transform">
+                                                {i + 1}
+                                            </div>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-3">
+                                                    <h3 className="font-black uppercase text-xl tracking-tighter">{p.name}</h3>
+                                                    {p.isCoordinator && <Badge className="bg-blue-600 text-white font-bold px-2 py-0 border-none rounded-none text-[10px]">LEAD APPLICANT</Badge>}
+                                                </div>
+                                                <p className="text-sm font-bold text-gray-400 font-mono tracking-widest uppercase italic">
+                                                    Status: {p.isCoordinator ? 'Project Coordinator' : 'Technical Partner'}
+                                                </p>
+                                                <div className="prose prose-sm max-w-none text-gray-600 leading-relaxed italic border-l-4 border-gray-200 pl-4 py-2">
+                                                    {p.description || "No description provided."}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            </section>
+
+                            {/* Detailed Budget Appendix */}
+                            <section className="space-y-8 pt-12 border-t-8 border-black">
+                                <h2 className="text-4xl font-black uppercase border-b-4 border-black pb-4">Appendix B: Financial Breakdown</h2>
+                                <div className="bg-black text-white p-8 rounded-[32px] space-y-4 shadow-xl">
+                                    <div className="flex justify-between items-end border-b border-white/20 pb-4">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.5em] opacity-40">Consolidated Grant Request</span>
+                                        <span className="text-5xl font-black italic tracking-tighter">€{totalBudget.toLocaleString()}</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                                        {budgetArray.map((item: any, i: number) => (
+                                            <div key={i} className="space-y-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-xs font-bold uppercase tracking-widest">{item.item}</span>
+                                                    <span className="text-lg font-black text-emerald-400 font-mono">€{item.cost?.toLocaleString()}</span>
+                                                </div>
+                                                <p className="text-[10px] text-white/40 leading-relaxed">{item.description}</p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </section>
                         </div>
