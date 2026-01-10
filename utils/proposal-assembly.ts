@@ -49,6 +49,37 @@ function cleanTitle(title: string): string {
     return t.replace(/^\w/, (c) => c.toUpperCase());
 }
 
+const PREFERRED_ORDER = [
+    'relevance',
+    'project_description',
+    'needs_analysis',
+    'impact',
+    'project_design_implementation',
+    'project_design',
+    'work_packages_overview',
+    'work_package_1',
+    'work_package_2',
+    'work_package_3',
+    'work_package_4',
+    'work_package_5',
+    'work_package_6',
+    'participating_organisations',
+    'partnership_arrangements',
+    'organisation_profiles'
+];
+
+function getPriority(key: string, label: string): number {
+    const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
+    const nk = normalize(key);
+    const nl = normalize(label);
+
+    for (let i = 0; i < PREFERRED_ORDER.length; i++) {
+        const p = normalize(PREFERRED_ORDER[i]);
+        if (nk.includes(p) || nl.includes(p)) return i;
+    }
+    return 100; // Default low priority
+}
+
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const fundingScheme = proposal.fundingScheme || (proposal as any).funding_scheme;
     const dynamicSections = proposal.dynamicSections || (proposal as any).dynamic_sections || {};
@@ -59,38 +90,29 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const finalDocument: DisplaySection[] = [];
     const renderedKeys = new Set<string>();
     const renderedWPIndices = new Set<number>();
-    let lastWPRelevantIndex = -1;
-    let lastWPLevel = 2;
 
-    // 1. Check if template has a summary section to avoid double-rendering
-    const hasTemplateSummary = fundingScheme?.template_json?.sections?.some((s: any) =>
-        s.key === 'summary' ||
-        s.key === 'abstract' ||
-        s.key === 'project_summary' ||
-        s.label.toLowerCase().includes('summary')
-    );
+    // 1. Collect all potential sections from both Template AND Dynamic Sources
+    let pool: DisplaySection[] = [];
 
+    // Add Executive Summary if it exists and not in template
     const summaryContent = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
-
-    if (summaryContent && !hasTemplateSummary) {
-        finalDocument.push({ id: 'summary', title: 'Executive Summary', content: summaryContent, level: 1 });
+    if (summaryContent) {
+        pool.push({ id: 'summary', title: 'Executive Summary', content: summaryContent, level: 1 });
         renderedKeys.add('summary');
         renderedKeys.add('abstract');
     }
 
-    // 2. Main Narrative (Strict Template Order)
+    // Process Template Sections
     if (fundingScheme?.template_json?.sections) {
-        const processTemplate = (sections: any[], level = 1, isInsideWP = false) => {
-            [...sections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
-                const key = ts.key || ts.label.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
+        const flatten = (sections: any[], level = 1) => {
+            sections.forEach(s => {
+                const key = s.key || s.label.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
+                let content = dynamicSections[s.key] || dynamicSections[key];
 
-                // Content matching
-                let content = dynamicSections[ts.key] || dynamicSections[key];
-
-                // Fuzzy fallback only if specific key fails
+                // Fuzzy match for content
                 if (!content) {
-                    const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
-                    const nLabel = normalize(ts.label);
+                    const normalize = (str: string) => (str || "").toLowerCase().replace(/[\W_]/g, '');
+                    const nLabel = normalize(s.label);
                     for (const [dk, dv] of Object.entries(dynamicSections)) {
                         if (normalize(dk) === nLabel) {
                             content = dv as string;
@@ -99,188 +121,106 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                         }
                     }
                 } else {
-                    renderedKeys.add(ts.key);
-                    renderedKeys.add(key);
+                    renderedKeys.add(s.key || key);
                 }
 
-                // Identify if this is a Work Package section
-                const isWP = ts.type === 'work_package' ||
-                    ((ts.label.toLowerCase().includes('work package') ||
-                        ts.label.toLowerCase().includes('workplan') ||
-                        ts.label.toLowerCase().includes('tasks')) && !isInsideWP);
+                const wpIdx = extractWPIndex(s.key || key) ?? extractWPIndex(s.label);
+                if (wpIdx !== undefined) renderedWPIndices.add(wpIdx);
 
-                let wpIdx: number | undefined = extractWPIndex(ts.key || key) ?? extractWPIndex(ts.label);
-
-                if ((isWP || wpIdx !== undefined) && !isInsideWP) {
-                    lastWPLevel = level;
-                    if (wpIdx !== undefined) {
-                        renderedWPIndices.add(wpIdx);
-                    }
-                }
-
-                let displayTitle = cleanTitle(ts.label);
-                if (isWP && wpIdx !== undefined) {
-                    const wpName = workPackages[wpIdx]?.name || `Work Package ${wpIdx + 1}`;
-                    // Strip existing WPx: from name if present to avoid duplication
-                    const cleanName = wpName.replace(/^WP\d+[:\s]+/i, '').trim();
-                    displayTitle = `WP${wpIdx + 1}: ${cleanName}`;
-                }
-
-                const currentIsInsideWP = isInsideWP || isWP;
-
-                // Only the main WP section should trigger structured data view to avoid duplication
-                const isMainWP = isWP && !isInsideWP;
-
-                finalDocument.push({
-                    id: ts.key || key,
-                    title: displayTitle,
+                pool.push({
+                    id: s.key || key,
+                    title: cleanTitle(s.label),
                     content: content,
-                    description: ts.description,
-                    type: (isMainWP && wpIdx !== undefined) ? 'work_package' : ts.type,
-                    level: isMainWP ? 2 : level, // Force all main WPs to level 2 to keep them as siblings
-                    wpIdx: wpIdx
+                    description: s.description,
+                    level: level,
+                    wpIdx: wpIdx,
+                    type: wpIdx !== undefined ? 'work_package' : s.type
                 });
 
-                if (currentIsInsideWP) {
-                    const lowLabel = ts.label.toLowerCase();
-                    const lowKey = (ts.key || "").toLowerCase();
-
-                    // Suppress boilerplate containers but MERGE their content into parent WP
-                    if (lowLabel.startsWith('activities') ||
-                        lowLabel.includes('description of') ||
-                        lowKey.includes('activities_description') ||
-                        lowKey.endsWith('_activities')) {
-
-                        if (lastWPRelevantIndex !== -1 && content && finalDocument[lastWPRelevantIndex]) {
-                            const parent = finalDocument[lastWPRelevantIndex];
-                            // Avoid double-merging if content is same
-                            if (!parent.content?.includes(content.substring(0, 50))) {
-                                parent.content = (parent.content || "") + "\n\n" + content;
-                            }
-                        }
-
-                        // Mark this and all children as rendered to avoid leftovers
-                        const markRendered = (sArr: any[]) => {
-                            sArr.forEach(s => {
-                                renderedKeys.add(s.key);
-                                const sk = s.key || s.label?.toLowerCase().replace(/\s+/g, '_').replace(/[\W_]/g, '');
-                                renderedKeys.add(sk);
-                                if (s.subsections) markRendered(s.subsections);
-                            });
-                        };
-                        renderedKeys.add(ts.key);
-                        renderedKeys.add(key);
-                        if (ts.subsections) markRendered(ts.subsections);
-
-                        // Remove the boilerplate header we just pushed
-                        finalDocument.pop();
-                        return;
-                    }
-                    if (isMainWP) {
-                        lastWPRelevantIndex = finalDocument.length - 1;
-                    }
-                }
-
-                if (ts.subsections && ts.subsections.length > 0) {
-                    processTemplate(ts.subsections, level + 1, currentIsInsideWP);
+                if (s.subsections && s.subsections.length > 0) {
+                    flatten(s.subsections, level + 1);
                 }
             });
         };
-        processTemplate(fundingScheme.template_json.sections);
+        flatten(fundingScheme.template_json.sections);
     }
 
-    // 3. Catch-all for AI-generated narrative that didn't match template
+    // Add remaining AI Dynamic Sections (Catch-all)
     Object.entries(dynamicSections).forEach(([key, val]) => {
         if (!renderedKeys.has(key) && val) {
             const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
             const nk = normalize(key);
+            if (['summary', 'abstract', 'budget', 'partners', 'risks'].includes(nk)) return;
 
-            if (nk === 'summary' || nk === 'abstract' || nk === 'budget' || nk === 'partners' || nk === 'risks') return;
-            if (nk.includes('descriptionoftheactivities') || nk.includes('activitiesdescription')) return;
+            const wpIdx = extractWPIndex(key);
+            if (wpIdx !== undefined) renderedWPIndices.add(wpIdx);
 
-            // Don't let WP leftovers float to the top
-            const wpMatch = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
-            if (wpMatch) return;
-
-            finalDocument.push({
+            pool.push({
                 id: key,
                 title: cleanTitle(key),
                 content: val as string,
-                level: 1
+                level: 1,
+                wpIdx: wpIdx,
+                type: wpIdx !== undefined ? 'work_package' : undefined
             });
             renderedKeys.add(key);
         }
     });
 
-    // 4. Custom User Sections
-    const customSections = (proposal as any).customSections || [];
-    customSections.forEach((s: any) => {
-        finalDocument.push({ id: s.id, title: s.title, content: s.content, level: 1, isCustom: true });
-    });
-
-    // 5. Work Plan / Work Packages (Grouping leftovers to avoid "WP2 on page 1")
-    // Collect ALL WP indices from both structural data AND dynamic sections
-    const allWPIndices = new Set<number>(workPackages.map((_, i) => i));
-    Object.entries(dynamicSections).forEach(([key, val]) => {
-        const nk = key.toLowerCase().replace(/[\W_]/g, '');
-        const match = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
-        if (match && val) {
-            allWPIndices.add(parseInt(match[1]) - 1);
+    // 2. Add structural leftovers (WPs not in narrative, Partners, Budget, Risks)
+    workPackages.forEach((wp: any, idx: number) => {
+        if (!renderedWPIndices.has(idx)) {
+            pool.push({
+                id: `wp_${idx + 1}_auto`,
+                title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
+                content: wp.description,
+                level: 2,
+                wpIdx: idx,
+                type: 'work_package'
+            });
         }
     });
 
-    if (allWPIndices.size > 0 && (renderedWPIndices.size < allWPIndices.size)) {
+    if (proposal.partners?.length > 0) {
+        pool.push({ id: 'auto_partners', title: 'Participating Organisations', level: 1, type: 'partners' });
+        pool.push({ id: 'auto_profiles', title: 'Organisation Profiles & Capacity', level: 1, type: 'partner_profiles' });
+    }
+    if (budget.length > 0) {
+        pool.push({ id: 'auto_budget', title: 'Budget & Cost Estimation', level: 1, type: 'budget' });
+    }
+    if (risks.length > 0) {
+        pool.push({ id: 'auto_risks', title: 'Risk Management & Mitigation', level: 1, type: 'risk' });
+    }
 
-        let insertIndex = finalDocument.length;
-        if (lastWPRelevantIndex !== -1) {
-            insertIndex = lastWPRelevantIndex + 1;
-        }
+    // 3. SORT based on Preferred Order mapping
+    finalDocument.push(...pool.sort((a, b) => {
+        // Special case: Executive Summary is ALWAYS first
+        if (a.id === 'summary') return -1;
+        if (b.id === 'summary') return 1;
 
-        const extras: DisplaySection[] = [];
+        const pA = getPriority(a.id, a.title);
+        const pB = getPriority(b.id, b.title);
 
-        // Add remaining WPs in order
-        Array.from(allWPIndices).sort((a, b) => a - b).forEach((idx: number) => {
-            if (!renderedWPIndices.has(idx)) {
-                const wp = workPackages[idx] || { name: `Work Package ${idx + 1}`, description: '' };
-                const narrative = dynamicSections[`work_package_${idx + 1}`] ||
-                    dynamicSections[`wp${idx + 1}`] ||
-                    dynamicSections[`workpackage${idx + 1}`] ||
-                    wp.description;
+        if (pA !== pB) return pA - pB;
 
-                extras.push({
-                    id: `wp_${idx + 1}_auto`,
-                    title: cleanTitle(wp.name ? `WP${idx + 1}: ${wp.name}` : `Work Package ${idx + 1}`),
-                    content: narrative,
-                    type: 'work_package',
-                    level: 2, // Always flatten leftovers to level 2
-                    wpIdx: idx
-                });
-                renderedWPIndices.add(idx);
-            }
+        // Preserve original relative order for items with same priority
+        return pool.indexOf(a) - pool.indexOf(b);
+    }));
+
+    // 4. Special injection: All Workpackages and activities (WP Overview)
+    // Find the first individual WP and inject the overview before it if not present
+    const firstWPIdx = finalDocument.findIndex(s => s.type === 'work_package');
+    const hasOverview = finalDocument.some(s => s.type === 'wp_list' || s.title.toLowerCase().includes('overview'));
+
+    if (firstWPIdx !== -1 && !hasOverview) {
+        finalDocument.splice(firstWPIdx, 0, {
+            id: 'wp_overview_injected',
+            title: 'All Workpackages and activities',
+            level: 1,
+            type: 'wp_list'
         });
-
-        if (extras.length > 0) {
-            finalDocument.splice(insertIndex, 0, ...extras);
-        }
-    }
-
-    // 6. Consortium / Partners
-    const hasPartners = finalDocument.some(s => s.id === 'partners' || s.title?.toLowerCase().includes('partner') || s.title?.toLowerCase().includes('participating'));
-    if (!hasPartners && proposal.partners?.length > 0) {
-        finalDocument.push({ id: 'auto_partners', title: 'Participating Organisations', level: 1, type: 'partners' });
-        finalDocument.push({ id: 'auto_profiles', title: 'Organisation Profiles & Capacity', level: 1, type: 'partner_profiles' });
-    }
-
-    // 7. Final Financials & Risks
-    const hasBudget = finalDocument.some(s => s.type === 'budget' || s.title?.toLowerCase().includes('budget'));
-    if (!hasBudget && budget.length > 0) {
-        finalDocument.push({ id: 'auto_budget', title: 'Budget & Cost Estimation', level: 1, type: 'budget' });
-    }
-
-    const hasRisks = finalDocument.some(s => s.type === 'risk' || s.title?.toLowerCase().includes('risk'));
-    if (!hasRisks && risks.length > 0) {
-        finalDocument.push({ id: 'auto_risks', title: 'Risk Management & Mitigation', level: 1, type: 'risk' });
     }
 
     return finalDocument;
 }
+

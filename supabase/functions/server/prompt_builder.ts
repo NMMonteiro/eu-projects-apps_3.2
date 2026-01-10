@@ -190,12 +190,23 @@ export function buildProposalPrompt(
       { key: 'impact', label: 'Impact', description: 'Expected change.' }
     ];
 
+  // Ensure high-priority sections requested by user are in the list if not already there
+  const prioritySections = [
+    { key: 'project_description', label: 'Project description', description: 'Comprehensive overview of the solution and methodology.' },
+    { key: 'needs_analysis', label: 'Needs analysis', description: 'Evidence-based analysis of target group gaps and urgent needs.' }
+  ];
+
+  prioritySections.forEach(ps => {
+    if (!allSections.some(s => s.key === ps.key || s.label.toLowerCase().includes(ps.label.toLowerCase()))) {
+      allSections.splice(1, 0, ps); // Insert after Summary/Context
+    }
+  });
+
   const userRequirements = userPrompt
     ? `\n\n🎯 MANDATORY USER REQUIREMENTS - HIGHEST PRIORITY:\n${userPrompt}\n============================================================`
     : '';
 
   // Robust budget extraction
-
   const rawBudget = extractNumericBudget(userPrompt || '') || extractNumericBudget(constraints.budget || '') || 250000;
   const budgetNum = rawBudget < 1000 ? 250000 : rawBudget;
 
@@ -216,7 +227,16 @@ export function buildProposalPrompt(
     AI INSTRUCTION: ${s.aiPrompt || 'Write a technical narrative addressing this section.'}`;
   }).join('\n\n');
 
-  return `You are an elite European Grant Writing Consultant. You are drafting a multi-million euro proposal for the following project.
+  return `You are an elite European Grant Writing Consultant with a 100% success rate in Erasmus+ and Horizon Europe funding. 
+Your writing style is highly professional, technical, persuasive, and data-driven. 
+
+MANDATORY INSTRUCTION: You MUST provide an EXTREMELY DETAILED and EXHAUSTIVE output for the following sections in this EXACT SEQUENCE:
+1. Relevance of the project: Deep context, policy alignment, and urgent need.
+2. Project description: Comprehensive overview of the solution.
+3. Needs analysis: Evidence-based analysis of target group gaps.
+4. Impact: Concrete, measurable outcomes (short and long term).
+5. Project design and implementation: Detailed methodology and operational flow.
+6. All Workpackages and activities: Granular breakdown of every single task and sub-activity.
 
 PROJECT IDEA:
 Title: ${idea.title}
@@ -248,6 +268,7 @@ STRICT OUTPUT CONTRACT:
 
 STRUCTURE TO FOLLOW (MANDATORY KEYS):
 ${sectionInstructions}
+    KEY: "work_packages_overview" (Provide the 'All Workpackages and activities' summary here)
 
 STRICT JSON OUTPUT FORMAT (FOLLOW EXACTLY):
 {
