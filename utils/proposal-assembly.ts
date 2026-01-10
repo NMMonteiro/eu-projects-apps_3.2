@@ -17,11 +17,13 @@ export interface DisplaySection {
 const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
 
 /**
- * Robustly extracts a WP index (0-based).
+ * Strict WP Index extraction.
  */
 function extractWPIndex(text: string): number | undefined {
     if (!text) return undefined;
-    const match = text.match(/(?:Work\s*Packages?|WP|WP_)[^\d]*(\d+)/i);
+    // Only match primary WP headers like "WP 1", "Work Package 1", or "wp_1"
+    const match = text.match(/^(?:Work\s*Packages?|WP|WP_)\s*(\d+)/i) ||
+        text.match(/(?:Work\s*package|WP)\s*n°\s*(\d+)/i);
     if (match) return parseInt(match[1]) - 1;
     return undefined;
 }
@@ -37,7 +39,7 @@ function cleanTitle(title: string): string {
 }
 
 /**
- * Assembles a structured document with NUCLEAR Deduplication.
+ * Assembles a structured document with TOTAL Deduping and Parent Inheritance.
  */
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const layout = proposal.layout?.sequence || [];
@@ -46,28 +48,14 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const workPackages = proposal.workPackages || (proposal as any).work_packages || [];
 
     const sectionPool = new Map<string, DisplaySection>();
-    const wpIdxToPoolKey = new Map<number, string>(); // Strict WP tracker
-    const titleToPoolKey = new Map<string, string>(); // Title tracker for generic sections
+    const wpIdxToPoolKey = new Map<number, string>();
+    const titleToPoolKey = new Map<string, string>();
 
-    // --- ULTIMATE FALLBACK PRIORITY ---
     const FOUNDATION_PRIORITY: Record<string, number> = {
-        'context': 1,
-        'projectsummary': 2,
-        'relevance': 3,
-        'projectdescription': 4,
-        'needsanalysis': 5,
-        'partnershiparrangements': 6,
-        'partnershipandcooperation': 6,
-        'impact': 10,
-        'projectdesignandimplementation': 11,
-        'workpackagesoverview': 100,
-        'wplist': 100,
-        'budget': 800,
-        'risks': 810,
-        'checklist': 990,
-        'annexes': 993,
-        'declaration': 992,
-        'euvalues': 994
+        'context': 1, 'projectsummary': 2, 'relevance': 3, 'projectdescription': 4, 'needsanalysis': 5,
+        'partnershiparrangements': 6, 'partnershipandcooperation': 6, 'impact': 10,
+        'projectdesignandimplementation': 11, 'workpackagesoverview': 100, 'wplist': 100,
+        'budget': 800, 'risks': 810, 'checklist': 990, 'annexes': 993, 'declaration': 992, 'euvalues': 994
     };
 
     const getLayoutPriority = (key: string, title?: string): number => {
@@ -94,37 +82,31 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
         const wpNum = extractWPIndex(key) ?? extractWPIndex(title || '');
         if (wpNum !== undefined) return 101 + wpNum;
-        if (nk.includes('checklist')) return 990;
-        if (nk.includes('annex')) return 993;
         return 500;
     };
 
-    // 1. EXECUTIVE SUMMARY (ANCHOR)
+    // 1. ANCHORS
     const summaryVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'] || dynamicSections['project_summary'];
     if (summaryVal) {
-        sectionPool.set('summary', {
-            id: 'summary',
-            title: 'Executive Summary',
-            content: summaryVal,
-            level: 1,
-            order: getLayoutPriority('summary', 'Executive Summary')
-        });
+        sectionPool.set('summary', { id: 'summary', title: 'Executive Summary', content: summaryVal, level: 1, order: getLayoutPriority('summary') });
         titleToPoolKey.set(normalize('Executive Summary'), 'summary');
     }
 
-    // 2. TEMPLATE SECTIONS (The Foundation)
+    // 2. TEMPLATE SECTIONS (Recursive with Parent Inheritance)
     if (fundingScheme?.template_json?.sections) {
-        const processSections = (sections: any[], level = 1) => {
+        const processSections = (sections: any[], level = 1, parentOrder?: number) => {
             sections.forEach((s, sIdx) => {
                 const baseKey = s.key || s.label.toLowerCase().replace(/\s+/g, '_');
                 const poolKey = `template_${level}_${sIdx}_${baseKey}`;
                 const normLabel = normalize(s.label);
 
                 const wpIdx = extractWPIndex(s.key || baseKey) ?? extractWPIndex(s.label);
-                const isWP = wpIdx !== undefined && (normLabel.includes('workpackage') || normalize(baseKey).includes('workpackage'));
+                // ONLY Level 1 template sections can be 'work_package' anchors
+                const isWP = wpIdx !== undefined && (normLabel.includes('workpackage') || normalize(baseKey).includes('workpackage')) && level === 1;
 
-                // Lift WPs to level 1
-                const effectiveLevel = isWP ? 1 : level;
+                // Inheritance Logic: If parent has a priority, children "stick" to it
+                const selfPriority = getLayoutPriority(baseKey, s.label);
+                const effectiveOrder = (selfPriority !== 500) ? selfPriority : (parentOrder !== undefined ? parentOrder : 500);
 
                 if (isWP && !wpIdxToPoolKey.has(wpIdx!)) {
                     wpIdxToPoolKey.set(wpIdx!, poolKey);
@@ -132,24 +114,21 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 titleToPoolKey.set(normLabel, poolKey);
 
                 sectionPool.set(poolKey, {
-                    id: poolKey,
-                    title: cleanTitle(s.label),
-                    description: s.description,
-                    level: effectiveLevel,
-                    wpIdx: wpIdx,
+                    id: poolKey, title: cleanTitle(s.label), description: s.description,
+                    level: level, wpIdx: wpIdx,
                     type: isWP ? 'work_package' : (wpIdx !== undefined ? 'wp_item' : s.type),
-                    order: getLayoutPriority(baseKey, s.label) + (effectiveLevel * 0.001)
+                    order: effectiveOrder + (sIdx * 0.0001) + (level * 0.00001)
                 });
 
                 if (s.subsections && s.subsections.length > 0) {
-                    processSections(s.subsections, level + 1);
+                    processSections(s.subsections, level + 1, effectiveOrder);
                 }
             });
         };
         processSections(fundingScheme.template_json.sections);
     }
 
-    // 3. ENRICHMENT (NUCLEAR MERGING)
+    // 3. ENRICHMENT (Strict merging)
     Object.entries(dynamicSections).forEach(([key, val]) => {
         if (!val || typeof val !== 'string') return;
         const nk = normalize(key);
@@ -158,72 +137,51 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         const wpIdx = extractWPIndex(key);
         let targetKey = '';
 
-        // Rule A: WP Index Match (Strongest)
         if (wpIdx !== undefined && wpIdxToPoolKey.has(wpIdx)) {
             targetKey = wpIdxToPoolKey.get(wpIdx)!;
-        }
-        // Rule B: Title Match
-        else if (titleToPoolKey.has(nk)) {
+        } else if (titleToPoolKey.has(nk)) {
             targetKey = titleToPoolKey.get(nk)!;
-        }
-        // Rule C: Fuzzy Key Match
-        else {
+        } else {
             for (const [pK, pV] of sectionPool.entries()) {
                 const pn = normalize(pK);
                 const tn = normalize(pV.title);
-                if (pn === nk || tn === nk || (nk.length > 4 && pn.includes(nk)) || (nk.length > 4 && nk.includes(pn))) {
-                    targetKey = pK;
-                    break;
+                if (pn === nk || tn === nk || nk.includes(pn) || pn.includes(nk)) {
+                    targetKey = pK; break;
                 }
             }
         }
 
         if (targetKey) {
             const existing = sectionPool.get(targetKey)!;
-            // Merge content if existing is empty or AI content is significantly longer
-            if (!existing.content || val.length > existing.content.length * 1.5) {
-                existing.content = val;
-            }
+            if (!existing.content || val.length > existing.content.length) existing.content = val;
         } else {
-            // New autonomous section
             sectionPool.set(key, {
-                id: key,
-                title: cleanTitle(key),
-                content: val,
-                level: 1,
-                wpIdx: wpIdx,
-                type: wpIdx !== undefined ? 'work_package' : undefined,
-                order: getLayoutPriority(key, key)
+                id: key, title: cleanTitle(key), content: val, level: 1, wpIdx: wpIdx,
+                type: wpIdx !== undefined ? 'wp_item' : undefined,
+                order: getLayoutPriority(key)
             });
-            if (wpIdx !== undefined) wpIdxToPoolKey.set(wpIdx, key);
         }
     });
 
-    // 4. STRUCTURAL DATA & ANCHORS
+    // 4. STRUCTURAL DATA
     const ensureAnchor = (id: string, searchTitle: string, type: string) => {
         const normSearch = normalize(searchTitle);
-        let foundKey = '';
+        let found = '';
         for (const [pK, pV] of sectionPool.entries()) {
             if (normalize(pV.title).includes(normSearch) || normSearch.includes(normalize(pV.title))) {
-                foundKey = pK;
-                break;
+                found = pK; break;
             }
         }
-        if (foundKey) {
-            const s = sectionPool.get(foundKey)!;
-            s.type = type;
-            s.level = 1; // Force lift
+        if (found) {
+            sectionPool.get(found)!.type = type;
         } else {
             sectionPool.set(id, { id, title: searchTitle, level: 1, type, order: getLayoutPriority(id) });
         }
     };
 
-    if (proposal.partners?.length > 0) {
-        ensureAnchor('partners_anchor', 'Participating Organisations', 'partners');
-        ensureAnchor('profiles_anchor', 'Organisation Profiles & Capacity', 'partner_profiles');
-    }
-    if ((proposal.budget || []).length > 0) ensureAnchor('budget_anchor', 'Budget & Cost Estimation', 'budget');
-    if ((proposal.risks || []).length > 0) ensureAnchor('risks_anchor', 'Risk Management & Mitigation', 'risk');
+    if (proposal.partners?.length > 0) ensureAnchor('p_anchor', 'Participating Organisations', 'partners');
+    if ((proposal.budget || []).length > 0) ensureAnchor('b_anchor', 'Budget & Cost Estimation', 'budget');
+    if ((proposal.risks || []).length > 0) ensureAnchor('r_anchor', 'Risk Management & Mitigation', 'risk');
 
     workPackages.forEach((wp: any, idx: number) => {
         const wpKey = wpIdxToPoolKey.get(idx);
@@ -232,40 +190,35 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             if (wp.name && (!s.title || s.title.length < 10)) s.title = cleanTitle(wp.name);
             if (!s.content) s.content = wp.description;
             s.type = 'work_package';
+        } else {
+            const wpId = `auto_wp_${idx}`;
+            sectionPool.set(wpId, {
+                id: wpId, title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
+                content: wp.description, level: 1, wpIdx: idx, type: 'work_package',
+                order: 101 + idx
+            });
+            wpIdxToPoolKey.set(idx, wpId);
         }
     });
 
-    // 5. FINAL ASSEMBLY
-    let finalDocument = Array.from(sectionPool.values());
-    finalDocument.sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000));
+    // 5. FINAL FLATTENING & CLEANUP
+    const items = Array.from(sectionPool.values()).sort((a, b) => (a.order ?? 1000) - (b.order ?? 1000));
 
     // Inject Overview
-    const firstWPIdx = finalDocument.findIndex(s => s.type === 'work_package');
-    if (firstWPIdx !== -1 && !finalDocument.some(s => s.type === 'wp_list')) {
-        finalDocument.splice(firstWPIdx, 0, {
-            id: 'wp_overview_injected',
-            title: 'Work packages overview',
-            level: 1,
-            type: 'wp_list',
-            order: getLayoutPriority('work_packages_overview')
-        });
+    const firstWPIdx = items.findIndex(s => s.type === 'work_package');
+    if (firstWPIdx !== -1 && !items.some(s => s.type === 'wp_list')) {
+        items.splice(firstWPIdx, 0, { id: 'wp_overview', title: 'Work packages overview', level: 1, type: 'wp_list', order: 100 });
     }
 
-    return finalDocument.filter(s => {
-        // Keep specialized blocks
-        if (['wp_list', 'partners', 'budget', 'risk', 'partner_profiles'].includes(s.type || '')) return true;
-
-        // Keep Work Packages
-        if (s.type === 'work_package' && s.level === 1) return true;
-
-        // Keep anything with substantial content
-        if (s.content && s.content.length > 10) return true;
-
-        // Keep Level 1 headers if they have children in the final pool
-        if (s.level === 1) {
-            return finalDocument.some(child => child.id.startsWith(s.id) && child.id !== s.id && child.content && child.content.length > 10);
+    return items.filter(s => {
+        // Keep structural blocks
+        if (['wp_list', 'partners', 'budget', 'risk', 'work_package'].includes(s.type || '')) return true;
+        // Keep anything with narrative
+        if (s.content && s.content.length > 20) return true;
+        // Keep Level 1/2 headers ONLY if they have children that survived
+        if (s.level <= 2) {
+            return items.some(child => child.id.startsWith(s.id) && child.id !== s.id && child.content && child.content.length > 20);
         }
-
         return false;
     });
 }
