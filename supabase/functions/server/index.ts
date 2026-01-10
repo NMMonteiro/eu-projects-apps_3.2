@@ -83,9 +83,22 @@ const saveToSupabase = async (proposal: any) => {
             partners: proposal.partners || []
         };
 
+        let layoutId = proposal.layout_id;
+        if (!layoutId && proposal.funding_scheme_id) {
+            const { data: layouts } = await supabase
+                .from('funding_scheme_layouts')
+                .select('id')
+                .eq('funding_scheme_id', proposal.funding_scheme_id)
+                .eq('is_default', true)
+                .limit(1);
+            if (layouts && layouts.length > 0) {
+                layoutId = layouts[0].id;
+            }
+        }
+
         const { data: savedProp, error: propError } = await supabase
             .from('proposals')
-            .upsert({ ...dbProposal, id: pid }, { onConflict: 'id' })
+            .upsert({ ...dbProposal, id: pid, layout_id: layoutId }, { onConflict: 'id' })
             .select()
             .single();
 

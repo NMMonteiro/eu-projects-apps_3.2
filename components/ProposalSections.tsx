@@ -103,7 +103,7 @@ export const ResponsiveSectionContent = ({ content }: { content: string }) => {
     return <div dangerouslySetInnerHTML={{ __html: processed }} />;
 };
 
-export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency, overrideWP }: { workPackages: any[], limitToIndex?: number, currency: string, overrideWP?: any }) => {
+export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency, overrideWP, onlyOverview }: { workPackages: any[], limitToIndex?: number, currency: string, overrideWP?: any, onlyOverview?: boolean }) => {
     if ((!workPackages || workPackages.length === 0) && !overrideWP) {
         return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">No work packages defined yet.</div>;
     }
@@ -116,6 +116,35 @@ export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency
             maximumFractionDigits: 0
         }).format(amount);
     };
+
+    // Overview Mode: Show a summary table
+    if (onlyOverview) {
+        return (
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/30">
+                <table className="w-full text-left border-collapse text-[11px]">
+                    <thead className="bg-slate-100/80 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th className="py-2 px-4 w-16">ID</th>
+                            <th className="py-2 px-4">Work Package Title</th>
+                            <th className="py-2 px-4 text-right">Budget</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                        {workPackages.map((wp, idx) => {
+                            const wpBudget = (wp.activities || []).reduce((sum: number, act: any) => sum + (act.estimatedBudget || 0), 0);
+                            return (
+                                <tr key={idx} className="bg-white/50 hover:bg-white transition-colors">
+                                    <td className="py-2 px-4 font-bold text-primary">WP {idx + 1}</td>
+                                    <td className="py-2 px-4 font-medium text-slate-700">{wp.name}</td>
+                                    <td className="py-2 px-4 text-right font-mono text-slate-500">{formatCurrency(wpBudget)}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        );
+    }
 
     const displayWPs = overrideWP
         ? [overrideWP]
@@ -145,7 +174,7 @@ export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="prose prose-invert prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: wp.description }} />
+                            <div className="prose prose-invert prose-sm max-w-none text-slate-600" dangerouslySetInnerHTML={{ __html: wp.description }} />
                             {wp.activities && wp.activities.length > 0 && (
                                 <div className="mt-6 space-y-4">
                                     <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-3 flex items-center gap-2">

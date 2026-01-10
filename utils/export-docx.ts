@@ -528,7 +528,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary"));
 
     // 3. ASSEMBLED SECTIONS (STRICT ORDER)
-    const finalDocument = assembleDocument(p);
+    const finalDocument = assembleDocument(p).filter(s => s.id !== 'summary');
 
     finalDocument.forEach((section: DisplaySection) => {
       const isWP = section.type === 'work_package';

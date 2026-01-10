@@ -808,10 +808,10 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                             </div>
                                             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border/40 pl-2">
                                                 {sections.filter(s => s.id !== 'summary' && !s.isDivider).map((section: any) => {
-                                                    const isWP = section.type === 'work_package' || section.wpIdx !== undefined;
-                                                    const isBudget = section.type === 'budget';
-                                                    const isRisk = section.type === 'risk';
-                                                    const isPartners = section.type === 'partners' || section.type === 'partner_profiles';
+                                                    const isWP = section.type === 'work_package' && section.level === 1;
+                                                    const isBudget = section.type === 'budget' && section.level === 1;
+                                                    const isRisk = section.type === 'risk' && section.level === 1;
+                                                    const isPartners = (section.type === 'partners' || section.type === 'partner_profiles') && section.level === 1;
 
                                                     let Icon = FileText;
                                                     let iconColor = "text-primary/70";
@@ -828,7 +828,10 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                                 if (isWP || isBudget || isRisk || isPartners) {
                                                                     e.preventDefault();
                                                                     setActiveTab('structured');
-                                                                    setTimeout(() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth' }), 100);
+                                                                    setTimeout(() => {
+                                                                        const el = document.getElementById(section.id);
+                                                                        if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                                                    }, 100);
                                                                 }
                                                             }}
                                                             className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-secondary/50 text-muted-foreground hover:text-foreground group"
@@ -880,7 +883,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         {/* Content Sections */}
                         <div className="col-span-1 lg:col-span-3 space-y-8">
                             {sections.map((section) => {
-                                const isWP = section.type === 'work_package' || (section.wpIdx !== undefined);
+                                const isWP = section.type === 'work_package' && section.level === 1;
                                 const isWPList = section.type === 'wp_list';
                                 const isBudget = section.type === 'budget';
                                 const isRisk = section.type === 'risk';
@@ -979,11 +982,12 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                         </div>
                                                     )}
                                                     {isProfiles && <DynamicPartnerSection partners={proposal.partners || []} />}
-                                                    {(isWP || isWPList) && (
+                                                    {((isWP && section.level === 1) || isWPList) && (
                                                         <DynamicWorkPackageSection
                                                             workPackages={proposal.workPackages || []}
                                                             limitToIndex={section.wpIdx}
                                                             currency={settings.currency || 'EUR'}
+                                                            onlyOverview={isWPList}
                                                             overrideWP={(section.wpIdx !== undefined && !proposal.workPackages?.[section.wpIdx]) ? {
                                                                 name: section.title,
                                                                 description: section.content,

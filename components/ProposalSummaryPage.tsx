@@ -194,7 +194,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                 {/* Narrative Sections */}
                 <div className="space-y-20">
                     {finalDocument.map((section, idx) => {
-                        const isWP = section.type === 'work_package' || (section.wpIdx !== undefined);
+                        const isWP = (section.type === 'work_package' || section.wpIdx !== undefined) && section.level === 1;
                         const isWPList = section.type === 'wp_list';
                         const isBudget = section.type === 'budget';
                         const isRisk = section.type === 'risk';
@@ -254,6 +254,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                                 workPackages={workPackages}
                                                 limitToIndex={section.wpIdx}
                                                 currency={currency}
+                                                onlyOverview={isWPList}
                                                 overrideWP={(section.wpIdx !== undefined && !workPackages[section.wpIdx]) ? {
                                                     name: section.title,
                                                     description: section.content,
