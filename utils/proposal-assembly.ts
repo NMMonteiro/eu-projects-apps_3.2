@@ -81,17 +81,22 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     key.includes('workpackage') ||
                     key.includes('workplan') ||
                     key.includes('tasks');
+
                 let wpIdx: number | undefined = undefined;
 
                 if (isWP) {
+                    // Try to extract index from key or label
                     const match = key.match(/\d+/) || ts.label.match(/\d+/);
                     if (match) {
-                        wpIdx = parseInt(match[0]) - 1;
+                        wpIdx = parseInt(match[match.length - 1]) - 1;
                         renderedWPIndices.add(wpIdx);
-                    } else if (!wpOverviewInserted && workPackages.length > 0) {
+                    }
+
+                    // Insert the Master Overview at the FIRST WP-related section found in template
+                    if (!wpOverviewInserted) {
                         finalDocument.push({
                             id: 'wp_master_list',
-                            title: 'Work Package Overview & Summary',
+                            title: 'Work Package Overview',
                             level: level,
                             type: 'wp_list'
                         });
@@ -104,7 +109,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     title: cleanTitle(ts.label),
                     content: content,
                     description: ts.description,
-                    type: (isWP && wpIdx === undefined) ? 'wp_list' : (isWP ? 'work_package' : ts.type),
+                    type: (isWP && wpIdx !== undefined) ? 'work_package' : ts.type,
                     level: level,
                     wpIdx: wpIdx
                 });
@@ -123,10 +128,9 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
             const nk = normalize(key);
 
-            // Skip common non-narrative keys or things we already did
             if (nk === 'summary' || nk === 'abstract' || nk === 'budget' || nk === 'partners' || nk === 'risks') return;
 
-            // Critical: Don't let WP leftovers float to the top
+            // Don't let WP leftovers float to the top
             const wpMatch = nk.match(/workpackage(\d+)/) || nk.match(/wp(\d+)/);
             if (wpMatch) return;
 
@@ -147,8 +151,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     });
 
     // 5. Work Plan / Work Packages (Grouping leftovers to avoid "WP2 on page 1")
-    const hasAnyWPInTemplate = finalDocument.some(s => s.type === 'work_package' || s.type === 'wp_list');
-
     // Collect ALL WP indices from both structural data AND dynamic sections
     const allWPIndices = new Set<number>(workPackages.map((_, i) => i));
     Object.entries(dynamicSections).forEach(([key, val]) => {
@@ -159,21 +161,24 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    if (allWPIndices.size > 0 && (!hasAnyWPInTemplate || renderedWPIndices.size < allWPIndices.size)) {
+    if (allWPIndices.size > 0 && (renderedWPIndices.size < allWPIndices.size || !wpOverviewInserted)) {
 
-        // Find the best place to insert these. Ideally after the last WP already rendered.
+        // Find position of the LAST WP/WP-List section rendered
         let insertIndex = finalDocument.length;
-        const lastWPIdx = [...finalDocument].reverse().findIndex(s => s.type === 'work_package' || s.type === 'wp_list');
-        if (lastWPIdx !== -1) {
-            insertIndex = finalDocument.length - lastWPIdx;
+        const lastWPPos = [...finalDocument].reverse().findIndex(s => s.type === 'work_package' || s.type === 'wp_list');
+        if (lastWPPos !== -1) {
+            insertIndex = finalDocument.length - lastWPPos;
         }
 
         const extras: DisplaySection[] = [];
+
+        // If Overview wasn't in template, add it now at the head of the extras
         if (!wpOverviewInserted) {
             extras.push({ id: 'wp_master_list_auto', title: 'Work Package Overview', level: 1, type: 'wp_list' });
             wpOverviewInserted = true;
         }
 
+        // Add remaining WPs in order
         Array.from(allWPIndices).sort((a, b) => a - b).forEach((idx: number) => {
             if (!renderedWPIndices.has(idx)) {
                 const wp = workPackages[idx] || { name: `Work Package ${idx + 1}`, description: '' };
