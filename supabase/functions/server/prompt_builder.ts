@@ -1,6 +1,23 @@
 // Prompt Builder module for AI integration
 // Constructs prompts for Google Gemini API
 
+export const extractNumericBudget = (text: string): number | null => {
+  if (!text) return null;
+  let clean = text.replace(/&nbsp;/g, ' ').replace(/\s/g, '');
+  const match = clean.match(/(?:€|EUR|budgetof|totalof|amountof)?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i);
+  if (!match) return null;
+  let val = match[1];
+  if (val.includes('.') && val.includes(',')) {
+    val = val.indexOf('.') < val.indexOf(',') ? val.split(',')[0].replace(/\./g, '') : val.split('.')[0].replace(/,/g, '');
+  } else if (val.includes('.') || val.includes(',')) {
+    const sep = val.includes('.') ? '.' : ',';
+    const parts = val.split(sep);
+    if (parts[parts.length - 1].length === 3) val = val.replace(/[.,]/g, '');
+    else val = parts[0].replace(/[.,]/g, '');
+  }
+  return parseInt(val) || null;
+};
+
 export function buildPhase2Prompt(summary: string, constraints: any, userPrompt?: string): string {
   const basePrompt = userPrompt
     ? `You are a creative brainstorming assistant.
@@ -178,22 +195,6 @@ export function buildProposalPrompt(
     : '';
 
   // Robust budget extraction
-  const extractNumericBudget = (text: string): number | null => {
-    if (!text) return null;
-    let clean = text.replace(/&nbsp;/g, ' ').replace(/\s/g, '');
-    const match = clean.match(/(?:€|EUR|budgetof|totalof|amountof)?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/i);
-    if (!match) return null;
-    let val = match[1];
-    if (val.includes('.') && val.includes(',')) {
-      val = val.indexOf('.') < val.indexOf(',') ? val.split(',')[0].replace(/\./g, '') : val.split('.')[0].replace(/,/g, '');
-    } else if (val.includes('.') || val.includes(',')) {
-      const sep = val.includes('.') ? '.' : ',';
-      const parts = val.split(sep);
-      if (parts[parts.length - 1].length === 3) val = val.replace(/[.,]/g, '');
-      else val = parts[0].replace(/[.,]/g, '');
-    }
-    return parseInt(val) || null;
-  };
 
   const rawBudget = extractNumericBudget(userPrompt || '') || extractNumericBudget(constraints.budget || '') || 250000;
   const budgetNum = rawBudget < 1000 ? 250000 : rawBudget;

@@ -1,4 +1,10 @@
 {
+    "compilerOptions": {
+        "lib": [
+            "deno.ns",
+            "deno.window"
+        ]
+    },
     "tasks": {
         "test": "deno test --allow-all"
     },

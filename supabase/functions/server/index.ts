@@ -144,6 +144,75 @@ const ensureBucket = async (bucketName: string) => {
     }
 };
 
+const rebalanceBudget = (proposal: any, targetBudget: number) => {
+    if (!proposal.budget || !Array.isArray(proposal.budget) || proposal.budget.length === 0) return;
+
+    console.log(`⚖️ Rebalancing budget to target: ${targetBudget}`);
+
+    // 1. Rebalance main budget items (Categories)
+    let currentTotal = proposal.budget.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
+
+    if (currentTotal !== targetBudget && proposal.budget.length > 0) {
+        // Adjust the largest item to avoid small items becoming negative or weird
+        const sortedItems = [...proposal.budget].sort((a, b) => (b.cost || 0) - (a.cost || 0));
+        const largestItem = sortedItems[0];
+        const diff = targetBudget - currentTotal;
+        largestItem.cost = (largestItem.cost || 0) + diff;
+        console.log(`   - Adjusted item "${largestItem.item}" by ${diff} to match total.`);
+    }
+
+    // 2. Ensure internal consistency for each budget item (breakdown and partnerAllocations)
+    proposal.budget.forEach((item: any) => {
+        const itemTarget = item.cost || 0;
+
+        // Partner Allocations consistency
+        if (item.partnerAllocations && Array.isArray(item.partnerAllocations) && item.partnerAllocations.length > 0) {
+            const paTotal = item.partnerAllocations.reduce((sum: number, pa: any) => sum + (pa.amount || 0), 0);
+            if (paTotal !== itemTarget) {
+                const sortedPA = [...item.partnerAllocations].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+                const largestPA = sortedPA[0];
+                largestPA.amount = (largestPA.amount || 0) + (itemTarget - paTotal);
+            }
+        }
+
+        // Breakdown consistency
+        if (item.breakdown && Array.isArray(item.breakdown) && item.breakdown.length > 0) {
+            const bdTotal = item.breakdown.reduce((sum: number, bd: any) => sum + (bd.total || 0), 0);
+            if (bdTotal !== itemTarget) {
+                const sortedBD = [...item.breakdown].sort((a, b) => (b.total || 0) - (a.total || 0));
+                const largestBD = sortedBD[0];
+                largestBD.total = (largestBD.total || 0) + (itemTarget - bdTotal);
+            }
+        }
+    });
+
+    // 3. Rebalance Work Package activity budgets
+    if (proposal.workPackages && Array.isArray(proposal.workPackages) && proposal.workPackages.length > 0) {
+        let wpTotal = 0;
+        proposal.workPackages.forEach((wp: any) => {
+            if (wp.activities && Array.isArray(wp.activities)) {
+                wpTotal += wp.activities.reduce((sum: number, act: any) => sum + (act.estimatedBudget || 0), 0);
+            }
+        });
+
+        if (wpTotal !== targetBudget) {
+            const allActivities: any[] = [];
+            proposal.workPackages.forEach((wp: any) => {
+                if (wp.activities && Array.isArray(wp.activities)) {
+                    wp.activities.forEach((act: any) => allActivities.push(act));
+                }
+            });
+
+            if (allActivities.length > 0) {
+                allActivities.sort((a, b) => (b.estimatedBudget || 0) - (a.estimatedBudget || 0));
+                const largestAct = allActivities[0];
+                largestAct.estimatedBudget = (largestAct.estimatedBudget || 0) + (targetBudget - wpTotal);
+                console.log(`   - Adjusted WP activity "${largestAct.name}" to match total target budget.`);
+            }
+        }
+    }
+};
+
 Deno.serve(async (req) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
@@ -590,11 +659,10 @@ Return ONLY valid JSON, no other text.`;
                 proposal.partners = partners;
             }
 
-            console.log(`Final proposal has ${proposal.partners?.length} partners and budget items: ${proposal.budget?.length}`);
-            if (proposal.budget) {
-                const total = proposal.budget.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
-                console.log(`Generated Budget Total: ${total}`);
-            }
+            // Rebalance budget to ensure exact accuracy
+            const rawTargetBudget = PromptBuilder.extractNumericBudget(userPrompt || '') || PromptBuilder.extractNumericBudget(constraints.budget || '') || 250000;
+            const targetBudget = rawTargetBudget < 1000 ? 250000 : rawTargetBudget;
+            rebalanceBudget(proposal, targetBudget);
 
             proposal.settings = {
                 currency: 'EUR',
@@ -1446,6 +1514,15 @@ Return ONLY valid JSON, no other text.`;
 
             // Update proposal
             proposal[section] = content;
+
+            // Rebalance if budget or workPackages was edited
+            if (section === 'budget' || section === 'workPackages') {
+                const maxBudgetParam = proposal.settings?.customParams?.find((p: any) => p.key === 'Max Budget')?.value;
+                const rawTargetBudget = PromptBuilder.extractNumericBudget(instruction) || PromptBuilder.extractNumericBudget(maxBudgetParam) || 250000;
+                const targetBudget = rawTargetBudget < 1000 ? 250000 : rawTargetBudget;
+                rebalanceBudget(proposal, targetBudget);
+            }
+
             proposal.updatedAt = new Date().toISOString();
             await KV.set(id, proposal);
 
