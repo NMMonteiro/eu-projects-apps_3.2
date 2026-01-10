@@ -251,5 +251,21 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         });
     }
 
-    return finalDocument.filter(s => (s.content && s.content.length > 10) || s.type === 'wp_list' || s.type === 'partners' || s.type === 'budget' || s.type === 'risk' || s.type === 'partner_profiles' || (s.type === 'work_package' && s.level === 1));
+    return finalDocument.filter(s => {
+        // Keep specialized blocks
+        if (['wp_list', 'partners', 'budget', 'risk', 'partner_profiles'].includes(s.type || '')) return true;
+
+        // Keep Work Packages
+        if (s.type === 'work_package' && s.level === 1) return true;
+
+        // Keep anything with substantial content
+        if (s.content && s.content.length > 10) return true;
+
+        // Keep Level 1 headers if they have children in the final pool
+        if (s.level === 1) {
+            return finalDocument.some(child => child.id.startsWith(s.id) && child.id !== s.id && child.content && child.content.length > 10);
+        }
+
+        return false;
+    });
 }
