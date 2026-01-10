@@ -64,7 +64,7 @@ function App() {
                 right: 0,
                 zIndex: 9999
             }}>
-                BUILD V3.8 - FIXED - HARD REFRESH RECOMMENDED (CTRL+F5)
+                BUILD V3.9 - FINAL REPAIR - HARD REFRESH RECOMMENDED (CTRL+F5)
             </div>
             <BrowserRouter>
                 <Toaster position="top-right" theme="dark" />

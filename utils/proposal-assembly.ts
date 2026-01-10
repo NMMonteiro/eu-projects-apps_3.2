@@ -30,6 +30,9 @@ function extractWPIndex(text: string): number | undefined {
 function cleanTitle(title: string): string {
     if (!title) return '';
     let t = title.replace(/undefined/gi, '').replace(/\(?\s*null\s*\)?/gi, '').replace(/-\s*null/gi, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+    // Remove trailing dashes often found in templates
+    t = t.replace(/\s*-\s*$/, '');
+
     t = t.replace(/^(WP\d+[:\s]+)+/i, (match) => {
         const first = match.match(/WP\d+/i);
         return first ? `${first[0].toUpperCase()}: ` : '';
@@ -59,7 +62,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         'impact': 500,
         'design': 600, 'implementation': 600, 'projectdesignandimplementation': 600,
         'partnershiparrangements': 700, 'partnershipandcooperation': 700,
-        'workpackagesoverview': 1000, 'wplist': 1000,
+        'workpackagesoverview': 1000, 'wplist': 1000, 'listofworkpackages': 1000,
         'budget': 3000,
         'risks': 4000,
         'declaration': 9000,
@@ -80,7 +83,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         return 5000;
     };
 
-    // 1. First, process template to establish anchors
+    // 1. Process template to establish anchors
     if (fundingScheme?.template_json?.sections) {
         const processTemplate = (sections: any[], level = 1) => {
             sections.forEach((s, sIdx) => {
@@ -88,9 +91,8 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 const bk = s.key || nl;
                 const wpIdx = extractWPIndex(bk) ?? extractWPIndex(s.label);
 
-                // DEDUPE WORK PACKAGES BY INDEX
+                // WP Deduplication
                 if (wpIdx !== undefined && wpIdxToPoolKey.has(wpIdx)) {
-                    // Already have an anchor for this WP, skip creating a new one
                     if (s.subsections) processTemplate(s.subsections, level + 1);
                     return;
                 }
@@ -115,31 +117,19 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         processTemplate(fundingScheme.template_json.sections);
     }
 
-    // 2. Merge database Work Packages (Guarantees card rendering)
+    // 2. Ensure ALL 5 WP slots exist in wpIdxToPoolKey before merging dynamic content
     [0, 1, 2, 3, 4].forEach(idx => {
-        const dbWp = workPackages[idx];
-        const existingKey = wpIdxToPoolKey.get(idx);
-
-        if (existingKey) {
-            const s = sectionPool.get(existingKey)!;
-            if (dbWp) {
-                if (dbWp.name && (!s.title || s.title.length < 10)) s.title = cleanTitle(dbWp.name);
-                if (!s.content || s.content.length < (dbWp.description || "").length) s.content = dbWp.description;
-            }
-            s.type = 'work_package';
-            s.level = 1;
-        } else if (dbWp || dynamicSections[`wp${idx + 1}`]) {
+        if (!wpIdxToPoolKey.has(idx)) {
             const id = `extra_wp_${idx}`;
             sectionPool.set(id, {
-                id, title: cleanTitle(dbWp?.name || `Work Package ${idx + 1}`),
-                content: dbWp?.description || dynamicSections[`wp${idx + 1}`],
-                level: 1, wpIdx: idx, type: 'work_package', order: 1101 + idx
+                id, title: `WP${idx + 1}: Loading...`, level: 1, wpIdx: idx, type: 'work_package',
+                order: 1101 + idx
             });
             wpIdxToPoolKey.set(idx, id);
         }
     });
 
-    // 3. Absolute Deduplication for Dynamic Content
+    // 3. Merging Dynamic Content (Now with forced anchors)
     Object.entries(dynamicSections).forEach(([key, val]) => {
         if (!val || typeof val !== 'string' || val.length < 10) return;
         const nk = normalize(key);
@@ -148,20 +138,43 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         const wpIdx = extractWPIndex(key);
         let target = wpIdx !== undefined ? wpIdxToPoolKey.get(wpIdx) : normTitleToPoolKey.get(nk);
 
-        // If it's something like "wp2 activities", it MUST merge into the WP2 anchor
-        if (wpIdx !== undefined && !target) target = wpIdxToPoolKey.get(wpIdx);
+        if (!target) {
+            for (const [pK, pV] of sectionPool.entries()) {
+                const pn = normalize(pK);
+                const tn = normalize(pV.title);
+                if (pn.includes(nk) || nk.includes(pn) || tn.includes(nk) || nk.includes(tn)) { target = pK; break; }
+            }
+        }
 
         if (target) {
             const s = sectionPool.get(target)!;
-            // Join narrative if they are different
-            if (!s.content) s.content = val;
+            // Always prefer the longest/most substantial content
+            if (!s.content || val.length > s.content.length) s.content = val;
             else if (!s.content.includes(val.substring(0, 30))) s.content += "\n\n" + val;
         } else {
             sectionPool.set(key, { id: key, title: cleanTitle(key), content: val, level: 1, wpIdx: wpIdx, order: getPriority(key) });
         }
     });
 
-    // 4. Structural Blocks
+    // 4. Final DB Sync (Win the Naming Battle)
+    workPackages.forEach((wp: any, idx: number) => {
+        const key = wpIdxToPoolKey.get(idx);
+        if (key) {
+            const s = sectionPool.get(key)!;
+            // FORCE NAME OVERWRITE: if DB has a real name, use it. 
+            // Avoid generic names like "Work package n2 -" or "WP2: activities"
+            const isGeneric = s.title.toLowerCase().includes('n°') || s.title.toLowerCase().includes('activities') || s.title.length < 20;
+            if (wp.name && (isGeneric || wp.name.length > s.title.length)) {
+                s.title = `WP${idx + 1}: ${cleanTitle(wp.name)}`;
+            }
+            if (wp.description && (!s.content || wp.description.length > s.content.length)) {
+                s.content = wp.description;
+            }
+            s.type = 'work_package'; // Ensure it's a card
+        }
+    });
+
+    // 5. Structural Blocks
     const ensureHeader = (id: string, searchTitle: string, type: string) => {
         let found = '';
         const nt = normalize(searchTitle);
@@ -184,23 +197,27 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     if ((proposal.budget || []).length > 0) ensureHeader('b_main', 'Budget', 'budget');
     if ((proposal.risks || []).length > 0) ensureHeader('r_main', 'Risk Management', 'risk');
 
-    // 5. Executive Summary
     const sumVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'];
     if (sumVal) sectionPool.set('summary', { id: 'summary', title: 'Executive Summary', content: sumVal, level: 1, order: 0 });
 
-    // 6. Final Sort & Dedupe injected Overview
+    // 6. Assemble & Inject Overview
     let items = Array.from(sectionPool.values()).sort((a, b) => (a.order ?? 5000) - (b.order ?? 5000));
 
-    // Inject Overview ONLY if not already present in template
-    const hasOverview = items.some(s => normalize(s.title).includes('workpackagesoverview') || normalize(s.title).includes('wplist'));
+    const hasOverview = items.some(s => {
+        const n = normalize(s.title);
+        return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages');
+    });
+
     if (!hasOverview) {
-        const wp1Idx = items.findIndex(s => s.wpIdx === 0 && s.type === 'work_package');
-        if (wp1Idx !== -1) {
-            items.splice(wp1Idx, 0, { id: 'wp_list_injected', title: 'Work packages overview', level: 1, type: 'wp_list', order: 1000 });
+        const firstWPIdx = items.findIndex(s => s.wpIdx !== undefined && s.type === 'work_package');
+        if (firstWPIdx !== -1) {
+            items.splice(firstWPIdx, 0, { id: 'wp_list_gen', title: 'Work packages overview', level: 1, type: 'wp_list', order: 1000 });
         }
     } else {
-        // If present, make sure it has the correct type
-        const ov = items.find(s => normalize(s.title).includes('workpackagesoverview') || normalize(s.title).includes('wplist'));
+        const ov = items.find(s => {
+            const n = normalize(s.title);
+            return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages');
+        });
         if (ov) ov.type = 'wp_list';
     }
 
