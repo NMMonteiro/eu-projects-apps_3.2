@@ -8,16 +8,34 @@ const corsHeaders = {
 };
 
 const extractJSON = (text: string) => {
+    // 1. Try to find the first '{' and last '}'
+    let jsonCandidate = text;
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1) {
+        jsonCandidate = text.substring(firstBrace, lastBrace + 1);
+    } else {
+        // Fallback: strip markdown blocks
+        jsonCandidate = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    }
+
     try {
-        const start = text.indexOf('{');
-        const end = text.lastIndexOf('}');
-        if (start !== -1 && end !== -1 && end > start) {
-            return JSON.parse(text.substring(start, end + 1));
-        }
-        return JSON.parse(text);
+        return JSON.parse(jsonCandidate);
     } catch (e) {
-        const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(cleaned);
+        console.log("Initial JSON parse failed, attempting repairs...");
+        // 2. Simple repair: if it ends prematurely, try adding closing braces
+        try {
+            let fixed = jsonCandidate;
+            if (!fixed.endsWith('}')) {
+                // Try to close up to 5 levels
+                for (let i = 0; i < 5; i++) {
+                    fixed += '}';
+                    try { return JSON.parse(fixed); } catch (err) { }
+                }
+            }
+        } catch (err) { }
+        throw e;
     }
 };
 
@@ -150,7 +168,7 @@ Deno.serve(async (req) => {
             model: 'gemini-2.0-flash',
             generationConfig: {
                 temperature: 0.1, // Low temperature for precision
-                maxOutputTokens: 2048
+                maxOutputTokens: 8192 // Increased to handle large WP arrays
             }
         });
         console.log('Model instance created (Gemini 2.0 Flash)');

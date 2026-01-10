@@ -15,7 +15,7 @@ export interface DisplaySection {
 
 function cleanTitle(title: string): string {
     if (!title) return '';
-    return title
+    let t = title
         .replace(/undefined/gi, '')
         .replace(/\(?\s*null\s*\)?/gi, '')
         .replace(/undefined_/gi, ' ')
@@ -23,8 +23,15 @@ function cleanTitle(title: string): string {
         .replace(/\s+/g, ' ')
         .replace(/\(\s*-\s*\)/g, '')
         .replace(/\s*-\s*$/, '') // Remove trailing dash
-        .trim()
-        .replace(/^\w/, (c) => c.toUpperCase());
+        .trim();
+
+    // Remove repeated "WPx:" prefixes (e.g., "WP1: WP1: title" -> "WP1: title")
+    t = t.replace(/^(WP\d+[:\s]+)+/i, (match) => {
+        const first = match.match(/WP\d+/i);
+        return first ? `${first[0].toUpperCase()}: ` : '';
+    });
+
+    return t.replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
@@ -86,11 +93,16 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 let wpIdx: number | undefined = undefined;
 
-                if (isWP) {
+                const lookupKey = ts.key || key;
+                const keyMatch = lookupKey.match(/work_package_(\d+)/i) ||
+                    lookupKey.match(/workpackage(\d+)/i) ||
+                    lookupKey.match(/wp(\d+)/i);
+
+                if (isWP || keyMatch) {
                     lastWPLevel = level;
-                    // Try to extract index from key or label - be more specific to avoid matching section numbers
-                    const wpMatch = key.match(/workpackage(\d+)/i) ||
-                        key.match(/wp(\d+)/i) ||
+
+                    // Priority 1: Extraction from key/label
+                    const wpMatch = keyMatch ||
                         ts.label.match(/Work Package\s*(\d+)/i) ||
                         ts.label.match(/WP\s*(\d+)/i);
 
@@ -99,9 +111,8 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                         renderedWPIndices.add(wpIdx);
                     }
 
-                    // Insert the Master Overview at the FIRST REAL WP section (with index)
-                    // or if it's a generic container, we'll wait for the first child or handle in leftovers
-                    if (!wpOverviewInserted && wpIdx !== undefined) {
+                    // Insert the Master Overview at the FIRST WP-related section found in template
+                    if (!wpOverviewInserted) {
                         finalDocument.push({
                             id: 'wp_master_list',
                             title: 'Work Package Overview',
@@ -113,8 +124,11 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 }
 
                 let displayTitle = cleanTitle(ts.label);
-                if (isWP && wpIdx !== undefined && workPackages[wpIdx]?.name) {
-                    displayTitle = `WP${wpIdx + 1}: ${workPackages[wpIdx].name}`;
+                if (isWP && wpIdx !== undefined) {
+                    const wpName = workPackages[wpIdx]?.name || `Work Package ${wpIdx + 1}`;
+                    // Strip existing WPx: from name if present to avoid duplication
+                    const cleanName = wpName.replace(/^WP\d+[:\s]+/i, '').trim();
+                    displayTitle = `WP${wpIdx + 1}: ${cleanName}`;
                 }
 
                 const currentIsInsideWP = isInsideWP || isWP;

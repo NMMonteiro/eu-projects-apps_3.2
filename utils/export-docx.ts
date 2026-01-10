@@ -269,7 +269,7 @@ function createKeyValueTable(lines: string[]): Table {
   });
 }
 
-function createWorkPackageTable(wps: WorkPackage[]): Table {
+function createWorkPackageTable(wps: WorkPackage[], currency: string = "EUR"): Table {
   const rows: TableRow[] = [];
 
   // Header
@@ -278,11 +278,15 @@ function createWorkPackageTable(wps: WorkPackage[]): Table {
       createTableHeaderCell("WP No."),
       createTableHeaderCell("Work Package Name"),
       createTableHeaderCell("Activities & Deliverables"),
+      createTableHeaderCell("Budget"),
     ]
   }));
 
   wps.forEach((wp, idx) => {
     const activityItems: Paragraph[] = [];
+
+    // Calculate WP Budget
+    const wpBudget = (wp.activities || []).reduce((sum, act: any) => sum + (act.estimatedBudget || act.cost || 0), 0);
 
     // Add activities if they exist
     if (wp.activities && wp.activities.length > 0) {
@@ -333,6 +337,14 @@ function createWorkPackageTable(wps: WorkPackage[]): Table {
         }),
         new TableCell({
           children: activityItems.length > 0 ? activityItems : [new Paragraph({ text: "-" })]
+        }),
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text: `${wpBudget.toLocaleString()} ${currency}`, bold: true, font: FONT, size: 18 })],
+            alignment: AlignmentType.RIGHT
+          })],
+          verticalAlign: VerticalAlign.CENTER,
+          shading: { fill: "F9F9F9" }
         })
       ]
     }));
@@ -602,7 +614,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
       } else if (isWPList && p.workPackages?.length > 0) {
         // Master Table
         const allWPs = p.workPackages.map((wp, i) => normalizeWorkPackage(wp, i));
-        docChildren.push(createWorkPackageTable(allWPs));
+        docChildren.push(createWorkPackageTable(allWPs, getCurrencySymbol(p.settings?.currency)));
       } else if (isWP && section.wpIdx !== undefined) {
         // Individual WP Detail: Narrative is already above, add activities/deliverables here
         const wpData = p.workPackages?.[section.wpIdx];
