@@ -161,9 +161,16 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
     if (allWPIndices.size > 0 && (!hasAnyWPInTemplate || renderedWPIndices.size < allWPIndices.size)) {
 
+        // Find the best place to insert these. Ideally after the last WP already rendered.
+        let insertIndex = finalDocument.length;
+        const lastWPIdx = [...finalDocument].reverse().findIndex(s => s.type === 'work_package' || s.type === 'wp_list');
+        if (lastWPIdx !== -1) {
+            insertIndex = finalDocument.length - lastWPIdx;
+        }
+
+        const extras: DisplaySection[] = [];
         if (!wpOverviewInserted) {
-            finalDocument.push({ id: 'work_plan_detail', title: 'Work Plan & Methodology', level: 1, isDivider: true });
-            finalDocument.push({ id: 'wp_master_list_auto', title: 'Work Package Overview', level: 1, type: 'wp_list' });
+            extras.push({ id: 'wp_master_list_auto', title: 'Work Package Overview', level: 1, type: 'wp_list' });
             wpOverviewInserted = true;
         }
 
@@ -174,7 +181,8 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     dynamicSections[`wp${idx + 1}`] ||
                     dynamicSections[`workpackage${idx + 1}`] ||
                     wp.description;
-                finalDocument.push({
+
+                extras.push({
                     id: `wp_${idx + 1}_auto`,
                     title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
                     content: narrative,
@@ -185,6 +193,10 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 renderedWPIndices.add(idx);
             }
         });
+
+        if (extras.length > 0) {
+            finalDocument.splice(insertIndex, 0, ...extras);
+        }
     }
 
     // 6. Consortium / Partners

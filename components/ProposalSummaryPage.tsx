@@ -224,7 +224,18 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                             </div>
                                         )}
                                         {isProfiles && <DynamicPartnerSection partners={proposal.partners || []} />}
-                                        {(isWP || isWPList) && <DynamicWorkPackageSection workPackages={workPackages} limitToIndex={section.wpIdx} currency={currency} />}
+                                        {(isWP || isWPList) && (
+                                            <DynamicWorkPackageSection
+                                                workPackages={workPackages}
+                                                limitToIndex={section.wpIdx}
+                                                currency={currency}
+                                                overrideWP={(section.wpIdx !== undefined && !workPackages[section.wpIdx]) ? {
+                                                    name: section.title,
+                                                    description: section.content,
+                                                    activities: []
+                                                } : undefined}
+                                            />
+                                        )}
                                         {isBudget && <DynamicBudgetSection budget={budget} currency={currency} />}
                                         {isRisk && <DynamicRiskSection risks={risks} />}
                                     </div>

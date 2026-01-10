@@ -103,8 +103,8 @@ export const ResponsiveSectionContent = ({ content }: { content: string }) => {
     return <div dangerouslySetInnerHTML={{ __html: processed }} />;
 };
 
-export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency }: { workPackages: any[], limitToIndex?: number, currency: string }) => {
-    if (!workPackages || workPackages.length === 0) {
+export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency, overrideWP }: { workPackages: any[], limitToIndex?: number, currency: string, overrideWP?: any }) => {
+    if ((!workPackages || workPackages.length === 0) && !overrideWP) {
         return <div className="p-4 text-center text-muted-foreground italic border border-dashed rounded-lg">No work packages defined yet.</div>;
     }
 
@@ -117,7 +117,9 @@ export const DynamicWorkPackageSection = ({ workPackages, limitToIndex, currency
         }).format(amount);
     };
 
-    const displayWPs = limitToIndex !== undefined ? [workPackages[limitToIndex]].filter(Boolean) : workPackages;
+    const displayWPs = overrideWP
+        ? [overrideWP]
+        : (limitToIndex !== undefined ? [workPackages[limitToIndex]].filter(Boolean) : workPackages);
 
     if (displayWPs.length === 0) return null;
 

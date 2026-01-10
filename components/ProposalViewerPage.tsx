@@ -972,7 +972,18 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                         </div>
                                                     )}
                                                     {isProfiles && <DynamicPartnerSection partners={proposal.partners || []} />}
-                                                    {(isWP || isWPList) && <DynamicWorkPackageSection workPackages={proposal.workPackages || []} limitToIndex={section.wpIdx} currency={settings.currency || 'EUR'} />}
+                                                    {(isWP || isWPList) && (
+                                                        <DynamicWorkPackageSection
+                                                            workPackages={proposal.workPackages || []}
+                                                            limitToIndex={section.wpIdx}
+                                                            currency={settings.currency || 'EUR'}
+                                                            overrideWP={(section.wpIdx !== undefined && !proposal.workPackages?.[section.wpIdx]) ? {
+                                                                name: section.title,
+                                                                description: section.content,
+                                                                activities: []
+                                                            } : undefined}
+                                                        />
+                                                    )}
                                                     {isBudget && <DynamicBudgetSection budget={proposal.budget || []} currency={settings.currency || 'EUR'} />}
                                                     {isRisk && <DynamicRiskSection risks={proposal.risks || []} />}
 
@@ -1092,6 +1103,27 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <p className="text-sm text-muted-foreground">{wp.description}</p>
+
+                                        {wp.activities && wp.activities.length > 0 && (
+                                            <div className="space-y-3">
+                                                <h5 className="text-[10px] font-bold uppercase tracking-widest text-primary/70 flex items-center gap-2">
+                                                    <Layers className="w-3 h-3" /> Activities & Tasks
+                                                </h5>
+                                                <div className="grid gap-2">
+                                                    {wp.activities.map((act: any, aIdx: number) => (
+                                                        <div key={aIdx} className="bg-secondary/20 border border-border/20 rounded-lg p-3 text-xs">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <span className="font-bold text-foreground/80">
+                                                                    {idx + 1}.{aIdx + 1} {act.name}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-muted-foreground/80 leading-relaxed text-[11px]" dangerouslySetInnerHTML={{ __html: act.description }} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {wp.deliverables && wp.deliverables.length > 0 && (
                                             <div className="bg-secondary/30 rounded-lg p-4">
                                                 <h5 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Deliverables</h5>
