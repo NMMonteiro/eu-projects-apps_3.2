@@ -218,76 +218,90 @@ export function buildProposalPrompt(
   const operationalBudget = Math.floor(budgetNum * 0.3);
   const miscBudget = budgetNum - personnelBudget - operationalBudget;
 
-  return `You are an expert EU funding proposal writer.
+  const sectionInstructions = allSections.map((s, i) => {
+    return `SECTION [${i + 1}]: ${s.label} (Key: "${s.key}")
+    Description: ${s.description}
+    AI Instructions: ${s.aiPrompt || 'Write a detailed technical narrative for this section.'}
+    Requirement: You MUST provide the full content for this section in "dynamicSections["${s.key}"]".`;
+  }).join('\n\n');
+
+  return `You are an expert EU funding proposal writer specializing in high-value innovative projects (Erasmus+, Horizon Europe, etc.).
 
 SELECTED PROJECT IDEA:
 Title: ${idea.title}
 Description: ${idea.description}
 
-CONTEXT: ${summary}
+CONTEXT & BACKGROUND: 
+${summary}
 
 CONSTRAINTS & REQUIREMENTS:
 ${userRequirements}
 - ALL PARTNERS MUST BE INCLUDED: You have EXACTLY ${partners.length} organizations to distribute work and budget to.
 - EXACT BUDGET: The TOTAL project budget MUST BE EXACTLY ${finalBudgetStr}.
-- DYNAMIC WORK PACKAGES: Generate logically necessary Work Packages (WP1: Management, followed by technical/implementation WPs, and a final Dissemination WP) based on the project scope.
+- DYNAMIC WORK PACKAGES: You MUST generate at least 4-6 logically necessary Work Packages (WPs) in the "workPackages" array.
+  * WP1: Project Management (Standard)
+  * WP2: Preparation, Research, and User Requirements
+  * WP3: Technical Development / Implementation / Pilots
+  * WP4: Quality Assurance & Testing (or combined with WP3 if appropriate)
+  * WP5: Dissemination, Communication & Exploitation
+  * WP6: Project Sustainability & Legacy (Optional depending on scope)
+
+${partnerInfo}
+
+FUNDING SCHEME TEMPLATE STRUCTURE:
+This project follows a specific funding scheme template. You MUST generate content for EACH of the following sections and place them in the "dynamicSections" object using the specified keys:
+
+${sectionInstructions}
 
 STRICT OUTPUT RULES:
-1. **PARTNERS ARRAY**: The "partners" array in JSON MUST contain EXACTLY ${partners.length} elements.
-2. **COORDINATOR**: The first partner (${partners[0]?.name}) IS THE COORDINATOR.
-3. **BUDGET ITEMS**: The sum of all "cost" values in the "budget" array MUST EQUAL EXACTLY ${budgetNum}.
-4. **CONSISTENCY**: For EVERY entry in the "workPackages" array, there MUST be a corresponding narrative section in "dynamicSections" (using keys like work_package_1, work_package_2, etc.).
-5. **TECHNICAL DEPTH**: Each Work Package description MUST be technical and specific to the project idea.
+1. **PARTNERS ARRAY**: The "partners" array MUST contain EXACTLY ${partners.length} elements.
+2. **WP STRUCTURE**: Each Work Package in the "workPackages" array MUST have at least 3-4 DETAILED activities.
+3. **ACTIVITIES CONTENT**: Each activity must have a clear name, lead partner, and an estimated budget that makes sense for its scope.
+4. **NARRATIVE CONSISTENCY**: For EVERY section listed in the TEMPLATE (including Work Packages if they are listed as sections), you MUST provide a technical narrative in "dynamicSections".
+5. **NARRATIVE DEPTH**: The narrative for each section must be technical, professional, and directly address the AI Instructions provided for that section. Use HTML tags (<h3>, <h4>, <p>, <ul>, <li>) for formatting.
+6. **ITEMIZED BUDGET**: The "budget" array items should be SPECIFIC (e.g., "Hardware & Equipment", "Software Licenses", "Travel for Coordination Meetings") instead of generic categories.
+7. **EXACT MATH**: The sum of all main budget items in the "budget" array MUST BE EXACTLY ${budgetNum}.
+8. **DETAILED BREAKDOWN**: Each main budget item MUST include a "breakdown" array with specific sub-items (name, quantity, unitCost).
 
 OUTPUT FORMAT (JSON ONLY):
 {
   "title": "${idea.title}",
   "partners": [
-    ${partners.map(p => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Project Coordinator' : 'Technical Partner'}", "isCoordinator": ${p.isCoordinator || false}, "description": "Concise profile..." }`).join(',\n    ')}
+    ${partners.map(p => `{ "name": "${p.name}", "role": "${p.isCoordinator ? 'Project Coordinator' : 'Technical Partner'}", "isCoordinator": ${p.isCoordinator || false}, "description": "Professional 3-sentence profile..." }`).join(',\n    ')}
   ],
   "workPackages": [
     {
       "name": "WP1: Project Management & Coordination",
-      "description": "Comprehensive management led by ${partners[0]?.name}. Includes administrative, financial, and technical orchestration.",
+      "description": "Comprehensive administrative and technical management...",
       "duration": "M1-M24",
       "activities": [
-        { "name": "Project Coordination", "description": "Weekly technical meetings and resource management.", "leadPartner": "${partners[0]?.name}", "participatingPartners": [${partners.slice(1).map(p => `"${p.name}"`).join(', ')}], "estimatedBudget": ${Math.floor(personnelBudget * 0.2)} },
-        { "name": "Quality Assurance", "description": "Monitoring deliverables and risk assessment.", "leadPartner": "${partners[0]?.name}", "participatingPartners": [], "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
+        { "name": "Financial & Administrative Management", "description": "...", "leadPartner": "${partners[0]?.name}", "participatingPartners": [], "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} },
+        { "name": "Technical Orchestration", "description": "...", "leadPartner": "${partners[0]?.name}", "participatingPartners": [${partners.slice(1).map(p => `"${p.name}"`).join(', ')}], "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} },
+        { "name": "Quality Assurance & Risk Monitoring", "description": "...", "leadPartner": "${partners[0]?.name}", "participatingPartners": [], "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
       ],
-      "deliverables": ["Project Management Plan", "Progress Reports", "Quality Handbook"]
+      "deliverables": ["Project Management Plan", "Progress Reports", "QA Handbook"]
     }
-    // YOU MUST CONTINUE GENERATING ALL NECESSARY WPs (WP2, WP3, WP4...)
-    // EVERY WP MUST HAVE AT LEAST 2-3 DETAILED ACTIVITIES.
+    // CONTINUE FOR ALL WPS...
   ],
   "budget": [
     {
-      "item": "Personnel Costs",
-      "cost": ${personnelBudget},
-      "description": "Salaries for staff across all partners for technical development and management.",
+      "item": "Senior Personnel & Development",
+      "cost": ${Math.floor(personnelBudget * 0.8)},
+      "description": "Implementation staff for core technical tasks.",
       "breakdown": [
-        { "subItem": "Senior Developers", "quantity": "12 months", "cost": ${Math.floor(personnelBudget * 0.5)} },
-        { "subItem": "Project Managers", "quantity": "24 months", "cost": ${Math.floor(personnelBudget * 0.3)} },
-        { "subItem": "Administrative Support", "quantity": "24 months", "cost": ${Math.floor(personnelBudget * 0.2)} }
+        { "subItem": "Technical Lead", "quantity": 1, "unitCost": ${Math.floor(personnelBudget * 0.3)}, "total": ${Math.floor(personnelBudget * 0.3)} },
+        { "subItem": "Senior Developers", "quantity": 2, "unitCost": ${Math.floor(personnelBudget * 0.25)}, "total": ${Math.floor(personnelBudget * 0.5)} }
       ],
-      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
-    },
-    { 
-      "item": "Operational Expenses", 
-      "cost": ${operationalBudget}, 
-      "description": "Travel to partner meetings, equipment for pilot testing, and software licenses.", 
-      "breakdown": [
-        { "subItem": "Travel & Subsistence", "quantity": "10 trips", "cost": ${Math.floor(operationalBudget * 0.4)} },
-        { "subItem": "Equipment & Licenses", "quantity": "Varies", "cost": ${Math.floor(operationalBudget * 0.6)} }
-      ], 
-      "partnerAllocations": [] 
-    },
-    { "item": "Miscellaneous / Contingency", "cost": ${miscBudget}, "description": "Contingency fund to ensure total budget matches requirement exactly.", "breakdown": [], "partnerAllocations": [] }
+      "partnerAllocations": [${partners.map(p => `{ "partner": "${p.name}", "amount": ${Math.floor((personnelBudget * 0.8) / partners.length)} }`).join(', ')}]
+    }
+    // CONTINUE WITH SPECIFIC BUDGET CATEGORIES (Hardware, Travel, Subcontracting...)
   ],
-  "risks": [{ "risk": "Technical delay", "likelihood": "Low", "impact": "High", "mitigation": "..." }],
-  "summary": "<p>Project summary...</p>",
+  "risks": [{ "risk": "...", "likelihood": "...", "impact": "...", "mitigation": "..." }],
+  "summary": "Full executive summary (HTML)...",
   "dynamicSections": {
-    "work_package_1": "<p>Technical narrative for Management...</p>"
-    // Add narrative sections for ALL generated work packages here (work_package_2, work_package_3, etc.)
+    "section_key_1": "HTML content...",
+    "section_key_2": "HTML content..."
+    // MUST INCLUDE ALL KEYS FROM THE TEMPLATE LISTED ABOVE
   }
 }
 

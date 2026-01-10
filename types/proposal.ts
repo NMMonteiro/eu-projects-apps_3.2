@@ -30,6 +30,14 @@ export interface RelevanceAnalysis {
 export interface WorkPackage {
   name: string;
   description: string;
+  duration?: string;
+  activities: {
+    name: string;
+    description: string;
+    leadPartner: string;
+    participatingPartners: string[];
+    estimatedBudget: number;
+  }[];
   deliverables: string[];
 }
 

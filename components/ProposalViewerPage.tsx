@@ -5,7 +5,8 @@ import {
     FileText, CheckCircle2, ChevronDown, Sparkles,
     Terminal, Settings, Layout, Search, Filter,
     Plus, Trash2, Edit, Save as SaveIcon, X,
-    Folder, File, ChevronRight, RefreshCw, Wand2, Shield
+    Folder, File, ChevronRight, RefreshCw, Wand2, Shield,
+    Activity, PlusCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -33,6 +34,8 @@ interface ProposalViewerPageProps {
 export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPageProps) {
     const [proposal, setProposal] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [generatingSection, setGeneratingSection] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'structured' | 'narrative' | 'settings'>('structured');
     const [expandedWp, setExpandedWp] = useState<number | null>(0);
     const [fundingScheme, setFundingScheme] = useState<any>(null);
@@ -45,7 +48,6 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
     const [savingConsortium, setSavingConsortium] = useState(false);
 
     // AI Generation State
-    const [generatingSection, setGeneratingSection] = useState<string | null>(null);
 
     useEffect(() => {
         loadProposal();
@@ -103,24 +105,92 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         }
     };
 
-    const handleUpdateProposal = async (updates: any) => {
+    const handleUpdateProposal = async (updates: Partial<any>) => {
+        if (!proposal) return;
+        setSaving(true);
         try {
-            const response = await fetch(`${serverUrl}/proposals/${proposalId}`, {
-                method: 'PUT',
+            const up = { ...proposal, ...updates };
+            up.updatedAt = new Date().toISOString();
+            const response = await fetch(`${serverUrl}/proposals`, {
+                method: 'POST', // Or PUT if your backend uses PUT
                 headers: {
-                    'Authorization': `Bearer ${publicAnonKey}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${publicAnonKey}`
                 },
-                body: JSON.stringify(updates)
+                body: JSON.stringify(up)
             });
+
             if (!response.ok) throw new Error('Update failed');
-            const updated = await response.json();
-            setProposal(updated);
-            return updated;
-        } catch (error) {
-            console.error('Update error:', error);
-            toast.error('Failed to save changes');
+
+            setProposal(up);
+            toast.success('Proposal updated');
+        } catch (error: any) {
+            toast.error(error.message);
+        } finally {
+            setSaving(false);
         }
+    };
+
+    // --- Budget Editor Functions ---
+    const handleAddBudgetItem = () => {
+        const newBudget = [...(proposal?.budget || [])];
+        newBudget.push({
+            item: 'New Budget Category',
+            cost: 0,
+            description: 'Description of this budget category...',
+            breakdown: []
+        });
+        handleUpdateProposal({ budget: newBudget });
+    };
+
+    const handleUpdateBudgetItem = (index: number, updates: any) => {
+        const newBudget = [...(proposal?.budget || [])];
+        newBudget[index] = { ...newBudget[index], ...updates };
+        handleUpdateProposal({ budget: newBudget });
+    };
+
+    const handleRemoveBudgetItem = (index: number) => {
+        const newBudget = (proposal?.budget || []).filter((_, i) => i !== index);
+        handleUpdateProposal({ budget: newBudget });
+    };
+
+    const handleAddBreakdownItem = (index: number) => {
+        const newBudget = [...(proposal?.budget || [])];
+        const item = { ...newBudget[index] };
+        if (!item.breakdown) item.breakdown = [];
+        item.breakdown.push({ subItem: 'New Item', quantity: 1, unitCost: 0, total: 0 });
+        newBudget[index] = item;
+        handleUpdateProposal({ budget: newBudget });
+    };
+
+    const handleUpdateBreakdownItem = (budgetIdx: number, breakdownIdx: number, updates: any) => {
+        const newBudget = [...(proposal?.budget || [])];
+        const item = { ...newBudget[budgetIdx] };
+        const breakdown = [...(item.breakdown || [])];
+        breakdown[breakdownIdx] = { ...breakdown[breakdownIdx], ...updates };
+
+        // Auto-calculate sub-total if quantity or unitCost changed
+        if (updates.quantity !== undefined || updates.unitCost !== undefined) {
+            const q = updates.quantity ?? breakdown[breakdownIdx].quantity;
+            const u = updates.unitCost ?? breakdown[breakdownIdx].unitCost;
+            breakdown[breakdownIdx].total = q * u;
+        }
+
+        item.breakdown = breakdown;
+        // Recalculate main cost
+        item.cost = breakdown.reduce((sum, b) => sum + (b.total || 0), 0);
+        newBudget[budgetIdx] = item;
+        handleUpdateProposal({ budget: newBudget });
+    };
+
+    const handleRemoveBreakdownItem = (budgetIdx: number, breakdownIdx: number) => {
+        const newBudget = [...(proposal?.budget || [])];
+        const item = { ...newBudget[budgetIdx] };
+        item.breakdown = (item.breakdown || []).filter((_, i) => i !== breakdownIdx);
+        // Recalculate main cost
+        item.cost = (item.breakdown || []).reduce((sum, b) => sum + (b.total || 0), 0);
+        newBudget[budgetIdx] = item;
+        handleUpdateProposal({ budget: newBudget });
     };
 
     const handleSaveConsortium = async () => {
@@ -317,69 +387,118 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                             </Badge>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-4">
                             {workPackagesArray.map((wp: any, idx: number) => (
-                                <Card key={idx} className={`bg-secondary/10 border-white/5 hover:border-primary/20 transition-all duration-300 overflow-hidden rounded-3xl group ${expandedWp === idx ? 'ring-1 ring-primary/30 shadow-2xl shadow-primary/5' : ''}`}>
-                                    <div
-                                        className="p-6 cursor-pointer flex items-center justify-between"
-                                        onClick={() => setExpandedWp(expandedWp === idx ? null : idx)}
-                                    >
-                                        <div className="flex items-center gap-6">
-                                            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl font-black text-white shadow-lg group-hover:scale-110 transition-transform">
-                                                {idx + 1}
-                                            </div>
-                                            <div>
-                                                <h4 className="text-xl font-bold group-hover:text-primary transition-colors">{wp.name || `Work Package ${idx + 1}`}</h4>
-                                                <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground font-mono">
-                                                    <span>{wp.duration || 'All project duration'}</span>
-                                                    <div className="h-1 w-1 rounded-full bg-white/10"></div>
-                                                    <span>{wp.activities?.length || 0} Activities</span>
-                                                </div>
-                                            </div>
+                                <Card key={idx} className="bg-secondary/10 border-white/5 rounded-3xl p-8 mb-6 overflow-hidden shadow-2xl relative group">
+                                    <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-100 transition-opacity">
+                                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => {
+                                            const newWPs = workPackagesArray.filter((_, i) => i !== idx);
+                                            handleUpdateProposal({ workPackages: newWPs });
+                                        }}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div className="flex items-center gap-6 mb-8">
+                                        <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
+                                            <Activity className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
                                         </div>
-                                        <ChevronDown className={`h-6 w-6 text-muted-foreground transition-transform duration-500 ${expandedWp === idx ? 'rotate-180 text-primary' : ''}`} />
+                                        <div className="flex-1">
+                                            <Input
+                                                className="text-2xl font-black tracking-tight italic bg-transparent border-none p-0 h-auto focus-visible:ring-0"
+                                                value={wp.name}
+                                                onChange={(e) => {
+                                                    const newWPs = [...workPackagesArray];
+                                                    newWPs[idx] = { ...wp, name: e.target.value };
+                                                    handleUpdateProposal({ workPackages: newWPs });
+                                                }}
+                                            />
+                                            <p className="text-xs text-muted-foreground font-black uppercase tracking-[0.3em] opacity-40">Duration: {wp.duration || 'Not set'}</p>
+                                        </div>
+                                        <Button variant="ghost" size="sm" onClick={() => setExpandedWp(expandedWp === idx ? -1 : idx)}>
+                                            {expandedWp === idx ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                                        </Button>
                                     </div>
 
                                     {expandedWp === idx && (
-                                        <CardContent className="px-8 pb-8 space-y-8 animate-in slide-in-from-top-4 duration-300">
-                                            <div className="h-px w-full bg-white/5"></div>
-                                            <div className="space-y-4">
-                                                <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70">Overview & Objectives</h5>
-                                                <p className="text-muted-foreground leading-relaxed text-sm bg-black/20 p-4 rounded-2xl border border-white/5 italic">
-                                                    {wp.description}
-                                                </p>
+                                        <CardContent className="p-0 pt-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                                            <div className="mb-8">
+                                                <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70 mb-3">Technical Objectives</h5>
+                                                <textarea
+                                                    className="w-full bg-black/30 border border-white/5 rounded-2xl p-4 text-sm text-muted-foreground min-h-[100px] focus:outline-none focus:border-primary/50 transition-colors"
+                                                    value={wp.description}
+                                                    onChange={(e) => {
+                                                        const newWPs = [...workPackagesArray];
+                                                        newWPs[idx] = { ...wp, description: e.target.value };
+                                                        handleUpdateProposal({ workPackages: newWPs });
+                                                    }}
+                                                />
                                             </div>
 
                                             <div className="space-y-4">
-                                                <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70">Planned Activities</h5>
+                                                <div className="flex items-center justify-between">
+                                                    <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70">Planned Activities</h5>
+                                                    <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/10" onClick={() => {
+                                                        const newWPs = [...workPackagesArray];
+                                                        const activities = [...(wp.activities || [])];
+                                                        activities.push({ name: 'New Activity', description: '', leadPartner: '', estimatedBudget: 0 });
+                                                        newWPs[idx] = { ...wp, activities };
+                                                        handleUpdateProposal({ workPackages: newWPs });
+                                                    }}>
+                                                        <Plus className="h-4 w-4 mr-1" /> Add Activity
+                                                    </Button>
+                                                </div>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {(Array.isArray(wp.activities) ? wp.activities : []).map((act: any, aIdx: number) => (
-                                                        <div key={aIdx} className="bg-white/5 rounded-2xl p-5 border border-white/5 space-y-3 hover:bg-white/10 transition-colors">
+                                                        <div key={aIdx} className="bg-white/5 rounded-2xl p-5 border border-white/5 space-y-3 hover:bg-white/10 transition-colors relative">
                                                             <div className="flex items-center justify-between">
                                                                 <span className="text-xs font-mono text-primary/50">ACT {idx + 1}.{aIdx + 1}</span>
-                                                                <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[10px]">€{act.estimatedBudget?.toLocaleString()}</Badge>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Input
+                                                                        type="number"
+                                                                        className="w-20 h-6 text-[10px] bg-black/40 border-none p-1 text-emerald-500 font-bold"
+                                                                        value={act.estimatedBudget || 0}
+                                                                        onChange={(e) => {
+                                                                            const newWPs = [...workPackagesArray];
+                                                                            const activities = [...wp.activities];
+                                                                            activities[aIdx] = { ...act, estimatedBudget: parseInt(e.target.value) || 0 };
+                                                                            newWPs[idx] = { ...wp, activities };
+                                                                            handleUpdateProposal({ workPackages: newWPs });
+                                                                        }}
+                                                                    />
+                                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive/30 hover:text-destructive" onClick={() => {
+                                                                        const newWPs = [...workPackagesArray];
+                                                                        const activities = wp.activities.filter((_: any, i: number) => i !== aIdx);
+                                                                        newWPs[idx] = { ...wp, activities };
+                                                                        handleUpdateProposal({ workPackages: newWPs });
+                                                                    }}>
+                                                                        <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                </div>
                                                             </div>
-                                                            <h6 className="font-bold text-white/90">{act.name}</h6>
-                                                            <p className="text-xs text-muted-foreground leading-relaxed">
-                                                                {act.description}
-                                                            </p>
-                                                            <div className="flex items-center gap-2 pt-2">
-                                                                <div className="h-5 w-5 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-[8px] font-bold text-blue-400">LD</div>
-                                                                <span className="text-[10px] text-muted-foreground font-bold">{act.leadPartner}</span>
-                                                            </div>
+                                                            <Input
+                                                                className="font-bold text-white/90 bg-transparent border-none p-0 h-auto focus-visible:ring-0"
+                                                                value={act.name}
+                                                                onChange={(e) => {
+                                                                    const newWPs = [...workPackagesArray];
+                                                                    const activities = [...wp.activities];
+                                                                    activities[aIdx] = { ...act, name: e.target.value };
+                                                                    newWPs[idx] = { ...wp, activities };
+                                                                    handleUpdateProposal({ workPackages: newWPs });
+                                                                }}
+                                                            />
+                                                            <textarea
+                                                                className="w-full bg-transparent border-none p-0 text-xs text-muted-foreground leading-relaxed focus:outline-none min-h-[60px]"
+                                                                value={act.description}
+                                                                onChange={(e) => {
+                                                                    const newWPs = [...workPackagesArray];
+                                                                    const activities = [...wp.activities];
+                                                                    activities[aIdx] = { ...act, description: e.target.value };
+                                                                    newWPs[idx] = { ...wp, activities };
+                                                                    handleUpdateProposal({ workPackages: newWPs });
+                                                                }}
+                                                            />
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <h5 className="text-sm font-bold uppercase tracking-widest text-primary/70">Deliverables</h5>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {(Array.isArray(wp.deliverables) ? wp.deliverables : []).map((del: string, dIdx: number) => (
-                                                        <Badge key={dIdx} variant="outline" className="bg-primary/5 text-primary border-primary/20 px-3 py-1 text-xs">
-                                                            <CheckCircle2 className="h-3 w-3 mr-2" />
-                                                            {del}
-                                                        </Badge>
                                                     ))}
                                                 </div>
                                             </div>
@@ -387,6 +506,18 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                     )}
                                 </Card>
                             ))}
+                            <Button
+                                variant="outline"
+                                className="w-full border-dashed border-2 py-8 rounded-3xl flex flex-col gap-2 hover:bg-primary/5 transition-colors"
+                                onClick={() => {
+                                    const newWPs = [...workPackagesArray];
+                                    newWPs.push({ name: `WP${newWPs.length + 1}: New Work Package`, description: '', activities: [] });
+                                    handleUpdateProposal({ workPackages: newWPs });
+                                }}
+                            >
+                                <PlusCircle className="h-6 w-6 text-primary" />
+                                <span className="font-bold text-primary/70">Add New Work Package</span>
+                            </Button>
                         </div>
                     </div>
 
@@ -403,38 +534,120 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                             </div>
                         </div>
 
-                        <Card className="bg-secondary/10 border-white/5 rounded-3xl overflow-hidden shadow-2xl">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-white/5">
-                                    <tr>
-                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">Budget Category</th>
-                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">Allocation Details</th>
-                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-muted-foreground text-right italic">Amount (€)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {budgetArray.map((item: any, i: number) => (
-                                        <tr key={i} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-6 font-bold text-white/80">{item.item}</td>
-                                            <td className="px-6 py-6 text-sm text-muted-foreground max-w-md">
-                                                {item.description}
-                                                <div className="mt-2 flex flex-wrap gap-2">
-                                                    {(Array.isArray(item.breakdown) ? item.breakdown : []).map((sub: any, sI: number) => (
-                                                        <span key={sI} className="text-[10px] bg-black/30 px-2 py-0.5 rounded border border-white/5">
-                                                            {sub.subItem} ({sub.quantity})
-                                                        </span>
+                        <Card className="bg-secondary/10 border-white/5 rounded-[32px] overflow-hidden shadow-2xl border-t-2 border-emerald-500/20">
+                            <div className="p-8 space-y-8">
+                                {budgetArray.map((item: any, i: number) => (
+                                    <div key={i} className="space-y-4 group">
+                                        <div className="flex items-start gap-4">
+                                            <div className="flex-1 space-y-1">
+                                                <Input
+                                                    className="text-xl font-bold bg-transparent border-none p-0 h-auto focus-visible:ring-0 text-white group-hover:text-emerald-400 transition-colors"
+                                                    value={item.item}
+                                                    onChange={(e) => handleUpdateBudgetItem(i, { item: e.target.value })}
+                                                />
+                                                <Input
+                                                    className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 text-sm text-muted-foreground italic"
+                                                    value={item.description}
+                                                    onChange={(e) => handleUpdateBudgetItem(i, { description: e.target.value })}
+                                                    placeholder="Category description..."
+                                                />
+                                            </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <span className="text-2xl font-black text-emerald-400">€{item.cost?.toLocaleString()}</span>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-destructive/30 hover:text-destructive hover:bg-destructive/10 rounded-full transition-all"
+                                                    onClick={() => handleRemoveBudgetItem(i)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        {/* Nested Breakdown Table - Premium Style */}
+                                        <div className="bg-black/20 rounded-2xl overflow-hidden border border-white/5">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className="bg-white/5 text-muted-foreground font-black uppercase tracking-widest h-10">
+                                                        <th className="px-4 text-left">Budget Item</th>
+                                                        <th className="px-4 text-center w-24">Quantity</th>
+                                                        <th className="px-4 text-right w-32">Unit Cost (€)</th>
+                                                        <th className="px-4 text-right w-32 font-black italic text-emerald-500/70">Total (€)</th>
+                                                        <th className="w-10"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {(item.breakdown || []).map((sub: any, sIdx: number) => (
+                                                        <tr key={sIdx} className="border-t border-white/5 hover:bg-white/5 transition-colors group/row">
+                                                            <td className="px-4 py-3">
+                                                                <Input
+                                                                    className="bg-transparent border-none p-0 h-auto focus-visible:ring-0 text-white/80"
+                                                                    value={sub.subItem}
+                                                                    onChange={(e) => handleUpdateBreakdownItem(i, sIdx, { subItem: e.target.value })}
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <Input
+                                                                    type="number"
+                                                                    className="bg-black/30 border-white/10 h-7 rounded text-center font-bold"
+                                                                    value={sub.quantity || 0}
+                                                                    onChange={(e) => handleUpdateBreakdownItem(i, sIdx, { quantity: parseInt(e.target.value) || 0 })}
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <Input
+                                                                    type="number"
+                                                                    className="bg-black/30 border-white/10 h-7 rounded text-right font-bold"
+                                                                    value={sub.unitCost || 0}
+                                                                    onChange={(e) => handleUpdateBreakdownItem(i, sIdx, { unitCost: parseInt(e.target.value) || 0 })}
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right font-bold text-emerald-400">
+                                                                €{(sub.total || 0).toLocaleString()}
+                                                            </td>
+                                                            <td className="px-2">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-white/10 hover:text-destructive transition-colors"
+                                                                    onClick={() => handleRemoveBreakdownItem(i, sIdx)}
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
                                                     ))}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-6 text-right font-mono font-bold text-emerald-400">€{item.cost.toLocaleString()}</td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-emerald-500/10">
-                                        <td colSpan={2} className="px-6 py-6 text-right font-black uppercase text-xs tracking-[0.2em] text-emerald-500 italic">Consolidated Total</td>
-                                        <td className="px-6 py-6 text-right font-black text-2xl text-emerald-500 italic border-l border-emerald-500/20 tracking-tighter">€{totalBudget.toLocaleString()}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                                                    <tr>
+                                                        <td colSpan={5} className="p-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                className="w-full h-8 border-dashed border border-white/5 hover:bg-emerald-500/5 hover:border-emerald-500/20 text-emerald-500/50 hover:text-emerald-500 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                onClick={() => handleAddBreakdownItem(i)}
+                                                            >
+                                                                <Plus className="h-3 w-3 mr-2" /> Add Breakdown Line
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                <Button
+                                    className="w-full py-8 border-dashed border-2 border-emerald-500/20 hover:border-emerald-500/50 hover:bg-emerald-500/5 rounded-3xl group flex flex-col gap-2"
+                                    onClick={handleAddBudgetItem}
+                                >
+                                    <PlusCircle className="h-8 w-8 text-emerald-500 group-hover:scale-110 transition-transform" />
+                                    <span className="font-black uppercase tracking-[0.2em] text-emerald-500/70">Add Main Budget Item</span>
+                                </Button>
+                            </div>
+
+                            <div className="bg-emerald-500/10 p-8 flex items-center justify-between border-t border-emerald-500/20">
+                                <span className="font-black uppercase tracking-[0.4em] text-emerald-500 text-sm italic">Consolidated Total Project Grant</span>
+                                <span className="text-4xl font-black text-emerald-400 tracking-tighter italic shadow-emerald-500/20 drop-shadow-lg">€{totalBudget.toLocaleString()}</span>
+                            </div>
                         </Card>
                     </div>
 
