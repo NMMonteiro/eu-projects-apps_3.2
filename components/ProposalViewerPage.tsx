@@ -775,7 +775,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                         <div className="hidden lg:block col-span-1 space-y-4">
                             <div className="sticky top-6 space-y-2">
                                 <div className="flex items-center justify-between px-2 mb-3">
-                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Document Structure [V3.4]</h3>
+                                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Document Structure [V3.5 - ULTRA]</h3>
                                     <Button
                                         variant="ghost"
                                         size="icon"
