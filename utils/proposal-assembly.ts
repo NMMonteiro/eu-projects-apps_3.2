@@ -38,6 +38,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const renderedKeys = new Set<string>();
     const renderedWPIndices = new Set<number>();
     let wpOverviewInserted = false;
+    let lastWPLevel = 2;
 
     // 1. Executive Summary (Always First)
     const summaryContent = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
@@ -85,6 +86,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 let wpIdx: number | undefined = undefined;
 
                 if (isWP) {
+                    lastWPLevel = level;
                     // Try to extract index from key or label
                     const match = key.match(/\d+/) || ts.label.match(/\d+/);
                     if (match) {
@@ -192,7 +194,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     title: cleanTitle(wp.name || `Work Package ${idx + 1}`),
                     content: narrative,
                     type: 'work_package',
-                    level: 2,
+                    level: lastWPLevel,
                     wpIdx: idx
                 });
                 renderedWPIndices.add(idx);
