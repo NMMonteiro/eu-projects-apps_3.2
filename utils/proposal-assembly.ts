@@ -130,6 +130,10 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 });
 
                 if (currentIsInsideWP) {
+                    const lowLabel = ts.label.toLowerCase();
+                    if (lowLabel === 'activities' || lowLabel.includes('description of')) {
+                        return; // Skip rendering these as separate sections/sidebar items
+                    }
                     lastWPRelevantIndex = finalDocument.length - 1;
                 }
 
