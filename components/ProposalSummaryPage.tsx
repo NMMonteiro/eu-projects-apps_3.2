@@ -89,40 +89,103 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
     const totalBudget = (proposal.budget || []).reduce((sum, item) => sum + (item.cost || 0), 0);
     const coordinator = proposal.partners?.find(p => p.isCoordinator);
 
-    let sections: { id: string; title: string; content: string | undefined; type?: string; level?: number, description?: string }[] = [];
+    let baseSections: any[] = [];
+    const renderedWPIndices = new Set<number>();
 
     if (fundingScheme?.template_json?.sections) {
         const processTemplateSections = (templateSections: any[], level = 1): any[] => {
             let flattened: any[] = [];
             [...templateSections].sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(ts => {
+                const lowerKey = ts.key?.toLowerCase() || "";
+                const lowerLabel = ts.label?.toLowerCase() || "";
+                const isWP = lowerKey.includes('work_package') || lowerLabel.includes('work package');
+
+                if (isWP) {
+                    const match = lowerKey.match(/work_package_(\d+)/i) || lowerLabel.match(/work package (\d+)/i);
+                    if (match) {
+                        renderedWPIndices.add(parseInt(match[1]) - 1);
+                    }
+                }
+
+                // Fallback content logic
+                let content = dynamicSections[ts.key];
+                if (!content) {
+                    const key = ts.key as string;
+                    if (key === 'summary') content = proposal.summary;
+                    else if (key === 'introduction') content = proposal.introduction;
+                    else if (key === 'relevance') content = proposal.relevance;
+                    else if (key === 'objectives') content = proposal.objectives;
+                    else if (key === 'methodology' || key === 'methods') content = proposal.methodology || proposal.methods;
+                    else if (key === 'workPlan') content = proposal.workPlan;
+                    else if (key === 'expectedResults') content = proposal.expectedResults;
+                    else if (key === 'impact') content = proposal.impact;
+                    else if (key === 'innovation') content = proposal.innovation;
+                    else if (key === 'sustainability') content = proposal.sustainability;
+                    else if (key === 'consortium') content = proposal.consortium;
+                    else if (key === 'riskManagement') content = proposal.riskManagement;
+                    else if (key === 'dissemination') content = proposal.dissemination;
+                }
+
                 flattened.push({
                     id: ts.key,
-                    title: ts.label,
-                    content: dynamicSections[ts.key],
+                    title: ts.label.replace(/^undefined\s*/gi, '').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+                    content: content,
                     description: ts.description,
                     type: ts.type,
                     level: level
                 });
+
                 if (ts.subsections && ts.subsections.length > 0) {
                     flattened = [...flattened, ...processTemplateSections(ts.subsections, level + 1)];
                 }
             });
             return flattened;
         };
-        sections = processTemplateSections(fundingScheme.template_json.sections);
+        baseSections = processTemplateSections(fundingScheme.template_json.sections);
+
+        // Add missing Work Packages
+        if (proposal.workPackages && proposal.workPackages.length > 0) {
+            proposal.workPackages.forEach((wp, idx) => {
+                if (!renderedWPIndices.has(idx)) {
+                    baseSections.push({
+                        id: `work_package_${idx + 1}`,
+                        title: wp.name || `Work Package ${idx + 1}`,
+                        content: wp.description,
+                        type: 'work_package',
+                        level: 2
+                    });
+                }
+            });
+        }
+    } else if (Object.keys(dynamicSections).length > 0) {
+        baseSections = Object.entries(dynamicSections).map(([key, content], idx) => ({
+            id: key,
+            title: `${idx + 1}. ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}`,
+            content: content as string
+        }));
     } else {
-        sections = [
+        baseSections = [
             { id: 'summary', title: 'Executive Summary', content: proposal.summary },
-            { id: 'introduction', title: 'Introduction', content: (proposal as any).introduction },
+            { id: 'introduction', title: 'Introduction', content: proposal.introduction },
             { id: 'relevance', title: 'Relevance', content: proposal.relevance },
-            { id: 'objectives', title: 'Objectives', content: (proposal as any).objectives },
-            { id: 'methodology', title: 'Methodology', content: (proposal as any).methodology || (proposal as any).methods },
+            { id: 'objectives', title: 'Objectives', content: proposal.objectives },
+            { id: 'methodology', title: 'Methodology', content: proposal.methodology || proposal.methods },
             { id: 'impact', title: 'Impact', content: proposal.impact },
-            { id: 'consortium', title: 'Consortium', content: (proposal as any).consortium },
-            { id: 'risk_management', title: 'Risk Management', content: (proposal as any).riskManagement },
-            { id: 'budget', title: 'Budget & Financial Planning', content: undefined }
+            { id: 'consortium', title: 'Consortium', content: proposal.consortium },
+            { id: 'riskManagement', title: 'Risk Management', content: proposal.riskManagement },
+            { id: 'dissemination', title: 'Dissemination & Communication', content: proposal.dissemination },
         ];
     }
+
+    // Add custom sections
+    const customSections = (proposal.customSections || []).map((section: any, idx: number) => ({
+        id: section.id || `custom-${idx}`,
+        title: `${baseSections.length + idx + 1}. ${section.title}`,
+        content: section.content,
+        isCustom: true
+    }));
+
+    const sections = [...baseSections, ...customSections];
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-US', {
