@@ -27,28 +27,42 @@ function extractWPIndex(text: string): number | undefined {
 }
 
 /**
- * PURE Sanitizer: Removes nulls, underscores, and LEADING WP PREFIXES.
- * The 'decoration' (adding WP1: etc) is handled by the caller who knows the index.
+ * PURE Sanitizer: Removes nulls, underscores, and ALL WP PREFIXES.
+ * Returns a totally clean title (e.g. "Project Management").
  */
 function cleanTitle(title: string): string {
     if (!title) return '';
-    // 1. Basic cleanup
+    // 1. Basic string cleanup
     let t = title.replace(/undefined/gi, '').replace(/\(?\s*null\s*\)?/gi, '').replace(/-\s*null/gi, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-    // 2. Trim trailing dashes
     t = t.replace(/\s*-\s*$/, '');
-    // 3. STRIP leading WP prefixes and artifacts like "WP1:" or "Work Package 1 -"
-    t = t.replace(/^(WP\d+[:\s\.-]*)+/i, '');
-    t = t.replace(/^Work\s*Package\s*(?:n°|no\.?|#)?\s*\d+\s*[:\.-]*/i, '');
 
-    t = t.trim();
-    // 4. Default if empty (e.g. original was just "WP1")
-    if (!t) return title;
+    // 2. EXTREME Regex for prefixes like "WP1:", "WP 1:", "Work Package 1 -", etc.
+    const wpPrefixRegex = /^(?:WP\s*\d+|Work\s*Package\s*(?:n°|no\.?|#)?\s*\d+)\s*[:\.-]*/i;
 
-    return t.replace(/^\w/, (c) => c.toUpperCase());
+    // Strip recursively to handle "WP1: WP1: ..."
+    let safety = 0;
+    while (wpPrefixRegex.test(t) && safety < 5) {
+        t = t.replace(wpPrefixRegex, '').trim();
+        safety++;
+    }
+
+    return t ? t.replace(/^\w/, (c) => c.toUpperCase()) : '';
 }
 
 /**
- * Assembles a structured document with ABSOLUTE WP INDEX DEDUPLICATION.
+ * Standardized Naming: Always format as "WPX: Title"
+ */
+function formatWPTitle(idx: number, rawTitle: string): string {
+    const clean = cleanTitle(rawTitle);
+    const prefix = `WP${idx + 1}`;
+    if (!clean || clean.toLowerCase() === 'activities' || clean.toLowerCase() === 'loading') {
+        return prefix;
+    }
+    return `${prefix}: ${clean}`;
+}
+
+/**
+ * Assembles a structured document with ABSOLUTE Sequential Lockdown and NO DUPLICATION.
  */
 export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     const layout = proposal.layout?.sequence || [];
@@ -90,16 +104,16 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         return 5000;
     };
 
-    // 1. Process template to establish anchors
+    // 1. Process Template Skeleton
     if (fundingScheme?.template_json?.sections) {
-        const processTemplate = (sections: any[], level = 1) => {
+        const process = (sections: any[], level = 1) => {
             sections.forEach((s, sIdx) => {
                 const nl = normalize(s.label);
                 const bk = s.key || nl;
                 const wpIdx = extractWPIndex(bk) ?? extractWPIndex(s.label);
 
                 if (wpIdx !== undefined && wpIdxToPoolKey.has(wpIdx)) {
-                    if (s.subsections) processTemplate(s.subsections, level + 1);
+                    if (s.subsections) process(s.subsections, level + 1);
                     return;
                 }
 
@@ -111,7 +125,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
                 sectionPool.set(pk, {
                     id: pk,
-                    title: isWPHeader ? `Work Package ${wpIdx! + 1}: ${cleanTitle(s.label)}` : cleanTitle(s.label),
+                    title: isWPHeader ? formatWPTitle(wpIdx!, s.label) : (cleanTitle(s.label) || s.label),
                     description: s.description,
                     level: (isWPHeader || MASTER_ORDER[nl]) ? 1 : level,
                     wpIdx: wpIdx,
@@ -119,25 +133,25 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     order: getPriority(bk, s.label) + (sIdx * 0.001)
                 });
 
-                if (s.subsections && s.subsections.length > 0) processTemplate(s.subsections, level + 1);
+                if (s.subsections && s.subsections.length > 0) process(s.subsections, level + 1);
             });
         };
-        processTemplate(fundingScheme.template_json.sections);
+        process(fundingScheme.template_json.sections);
     }
 
-    // 2. Ensure ALL 5 WP slots exist
+    // 2. Build Anchors
     [0, 1, 2, 3, 4].forEach(idx => {
         if (!wpIdxToPoolKey.has(idx)) {
             const id = `extra_wp_${idx}`;
             sectionPool.set(id, {
-                id, title: `WP${idx + 1}: Loading...`, level: 1, wpIdx: idx, type: 'work_package',
+                id, title: `WP${idx + 1}`, level: 1, wpIdx: idx, type: 'work_package',
                 order: 1101 + idx
             });
             wpIdxToPoolKey.set(idx, id);
         }
     });
 
-    // 3. Merge Dynamic Content
+    // 3. Merge Dynamic content
     Object.entries(dynamicSections).forEach(([key, val]) => {
         if (!val || typeof val !== 'string' || val.length < 10) return;
         const nk = normalize(key);
@@ -148,9 +162,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
         if (!target) {
             for (const [pK, pV] of sectionPool.entries()) {
-                const pn = normalize(pK);
-                const tn = normalize(pV.title);
-                if (pn.includes(nk) || nk.includes(pn) || tn.includes(nk) || nk.includes(tn)) { target = pK; break; }
+                if (normalize(pK).includes(nk) || nk.includes(normalize(pK)) || normalize(pV.title).includes(nk)) { target = pK; break; }
             }
         }
 
@@ -161,22 +173,21 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         } else {
             sectionPool.set(key, {
                 id: key,
-                title: wpIdx !== undefined ? `WP${wpIdx + 1}: ${cleanTitle(key)}` : cleanTitle(key),
+                title: wpIdx !== undefined ? formatWPTitle(wpIdx, key) : (cleanTitle(key) || key),
                 content: val, level: 1, wpIdx: wpIdx, order: getPriority(key)
             });
         }
     });
 
-    // 4. Final DB Sync (Solves Double WP3: WP3: issue)
+    // 4. Final DB Sync (The Hammer of Cleanliness)
     workPackages.forEach((wp: any, idx: number) => {
         const key = wpIdxToPoolKey.get(idx);
         if (key) {
             const s = sectionPool.get(key)!;
-            const dbName = wp.name ? cleanTitle(wp.name) : "";
-            const isGeneric = s.title.toLowerCase().includes('n°') || s.title.toLowerCase().includes('activities') || s.title.toLowerCase().includes('loading') || s.title.length < 20;
-
-            if (dbName && (isGeneric || dbName.length + 5 > s.title.length)) {
-                s.title = `WP${idx + 1}: ${dbName}`;
+            // Always overwrite with DB name if it's more descriptive, but format it carefully
+            const dbNameClean = wp.name ? cleanTitle(wp.name) : "";
+            if (dbNameClean) {
+                s.title = formatWPTitle(idx, dbNameClean);
             }
             if (wp.description && (!s.content || wp.description.length > s.content.length)) {
                 s.content = wp.description;
@@ -185,7 +196,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    // 5. Structural Blocks
+    // 5. Structural Anchors
     const ensureHeader = (id: string, searchTitle: string, type: string) => {
         let found = '';
         const nt = normalize(searchTitle);
@@ -201,34 +212,22 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     };
 
-    if (proposal.partners?.length > 0) {
-        ensureHeader('p_main', 'Participating Organisations', 'partners');
-        ensureHeader('p_prof', 'Organisation Profiles', 'partner_profiles');
-    }
-    if ((proposal.budget || []).length > 0) ensureHeader('b_main', 'Budget', 'budget');
-    if ((proposal.risks || []).length > 0) ensureHeader('r_main', 'Risk Management', 'risk');
+    if (proposal.partners?.length > 0) { ensureHeader('pm', 'Participating Organisations', 'partners'); ensureHeader('pp', 'Organisation Profiles', 'partner_profiles'); }
+    if ((proposal.budget || []).length > 0) ensureHeader('bm', 'Budget', 'budget');
+    if ((proposal.risks || []).length > 0) ensureHeader('rm', 'Risk Management', 'risk');
 
     const sumVal = proposal.summary || (proposal as any).abstract || dynamicSections['summary'];
     if (sumVal) sectionPool.set('summary', { id: 'summary', title: 'Executive Summary', content: sumVal, level: 1, order: 0 });
 
-    // 6. Assemble & Inject Overview
+    // 6. Injection
     let items = Array.from(sectionPool.values()).sort((a, b) => (a.order ?? 5000) - (b.order ?? 5000));
-
-    const hasOverview = items.some(s => {
-        const n = normalize(s.title);
-        return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages');
-    });
+    const hasOverview = items.some(s => { const n = normalize(s.title); return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages'); });
 
     if (!hasOverview) {
         const firstWPIdx = items.findIndex(s => s.wpIdx !== undefined && s.type === 'work_package');
-        if (firstWPIdx !== -1) {
-            items.splice(firstWPIdx, 0, { id: 'wp_list_gen', title: 'Work packages overview', level: 1, type: 'wp_list', order: 1000 });
-        }
+        if (firstWPIdx !== -1) items.splice(firstWPIdx, 0, { id: 'wp_list_final', title: 'Work packages overview', level: 1, type: 'wp_list', order: 1000 });
     } else {
-        const ov = items.find(s => {
-            const n = normalize(s.title);
-            return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages');
-        });
+        const ov = items.find(s => { const n = normalize(s.title); return n.includes('workpackagesoverview') || n.includes('wplist') || n.includes('listofworkpackages'); });
         if (ov) ov.type = 'wp_list';
     }
 
