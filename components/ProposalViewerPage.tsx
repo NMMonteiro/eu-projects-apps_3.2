@@ -514,6 +514,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                 },
                 body: JSON.stringify({
                     instruction: `For section '${editingSectionId}': ${aiEditInstruction}`,
+                    sectionId: editingSectionId
                 }),
             });
 
@@ -522,7 +523,21 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             const data = await response.json();
             if (data.proposal) {
                 setProposal(data.proposal);
-                setEditingContent(data.proposal[editingSectionId]); // Update manual edit view too
+
+                // Find the updated content for the current editing section
+                // It might be a direct key or a virtual section (extra_wp_*)
+                if (editingSectionId.startsWith('extra_wp_')) {
+                    const idx = parseInt(editingSectionId.split('_').pop() || '0');
+                    const wps = data.proposal.workPackages || data.proposal.work_packages || [];
+                    if (wps[idx]) {
+                        setEditingContent(wps[idx].description || '');
+                    }
+                } else if (data.proposal[editingSectionId]) {
+                    setEditingContent(data.proposal[editingSectionId]);
+                } else if (data.proposal.dynamicSections && data.proposal.dynamicSections[editingSectionId]) {
+                    setEditingContent(data.proposal.dynamicSections[editingSectionId]);
+                }
+
                 toast.success('AI updated the section!');
                 // Optional: Switch to manual tab to review?
             }

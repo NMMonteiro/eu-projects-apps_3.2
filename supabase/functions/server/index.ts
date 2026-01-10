@@ -1565,7 +1565,7 @@ Return ONLY valid JSON, no other text.`;
                     { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
                 );
             }
-            const { instruction } = await req.json();
+            const { instruction, sectionId } = await req.json();
 
             const proposal = await KV.get(id);
             if (!proposal) {
@@ -1579,24 +1579,33 @@ Return ONLY valid JSON, no other text.`;
             const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
             // Step 1: Determine which section to edit
-            const detectionPrompt = `Given this user instruction: "${instruction}"
+            let section = sectionId;
+
+            if (!section) {
+                const detectionPrompt = `Given this user instruction: "${instruction}"
 
 Which ONE section of the proposal should be edited?
 
 Available sections:
-- title, summary, relevance, methods, impact
-- introduction, objectives, methodology, expectedResults
-- innovation, sustainability, consortium, workPlan, riskManagement
-- dissemination
+- title, summary, relevance, impact, budget, risks, partners, timeline
+- workPackages (Choose this for ANYTHING related to activities, tasks, work packages, or the work plan)
+- dynamic_sections (Choose this for template-specific narrative sections)
 
 Return JSON: { "section": "sectionName" }
 
 Return ONLY valid JSON, no other text.`;
 
-            const detectResult = await model.generateContent(detectionPrompt);
-            const detectText = detectResult.response.text();
-            console.log('Detection Raw Output:', detectText);
-            const { section } = extractJSON(detectText);
+                const detectResult = await model.generateContent(detectionPrompt);
+                const detectText = detectResult.response.text();
+                console.log('Detection Raw Output:', detectText);
+                const detectData = extractJSON(detectText);
+                section = detectData.section;
+            }
+
+            // Map aliases if needed
+            if (section === 'workPlan' || section === 'activities' || section === 'tasks' || section?.startsWith('extra_wp_')) {
+                section = 'workPackages';
+            }
 
             // Special rules for structured sections
             const structuredSections = ['budget', 'risks', 'workPackages', 'timeline', 'partners'];
@@ -1606,12 +1615,13 @@ Return ONLY valid JSON, no other text.`;
 
 User instruction: ${instruction}
 
-TASK: Generate the NEW content for the "${section}" section only. 
+TASK: Generate the NEW content for the "${section}" section only based on the user instruction.
 
 CRITICAL RULES:
 1. DATA TYPE: If the section is one of [${structuredSections.join(', ')}], the content MUST be a JSON ARRAY of objects. DO NOT return a string or HTML for these sections.
-2. NARRATIVE: For other sections (summary, relevance, impact, etc.), provide detailed HTML content (<p>, <ul>, etc.).
-3. ARITHMETIC: If updating 'budget' and a total amount is specified, ensure all item costs sum up EXACTLY to that total.
+2. WORK PACKAGES: If editing 'workPackages', ensure each WP has multiple detailed activities (3-5 per WP). If the user asks to "improve activities", rewrite the descriptions to be more technical, detailed, and measurable. Keep the existing structure but improve the content.
+3. NARRATIVE: For other sections (summary, relevance, impact, or keys in dynamic_sections), provide detailed HTML content (<p>, <ul>, <li>, <strong> tags).
+4. ARITHMETIC: If updating 'budget' or 'workPackages' and a total amount is specified, ensure all item costs sum up EXACTLY to that total.
 
 Return JSON: { "content": <Array OR String depending on section type> }
 
@@ -1635,6 +1645,7 @@ Return ONLY valid JSON, no other text.`;
 
             proposal.updatedAt = new Date().toISOString();
             await KV.set(id, proposal);
+            await saveToSupabase(proposal);
 
             return new Response(
                 JSON.stringify({ proposal, editedSection: section }),

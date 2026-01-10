@@ -256,14 +256,17 @@ STRICT OUTPUT CONTRACT:
 1. **PARTNERS MAPPING**: 
    - You MUST include EXACTLY ${partners.length} partners in the "partners" array.
    - The first partner MUST be the Lead Coordinator: "${partners[0]?.name}".
-2. **WORK PACKAGES**:
-   - You MUST generate 5 to 6 distinct Work Packages in the "workPackages" array.
-   - For EACH Work Package, you MUST also create a narrative summary in "dynamicSections" using keys like "work_package_1", "work_package_2", etc.
+2. **WORK PACKAGES (CRITICAL)**:
+   - You MUST generate exactly 5 distinct Work Packages in the "workPackages" array.
+   - Each Work Package MUST contain between 3 and 5 detailed activities.
+   - In EACH activity, provide a comprehensive "description" (at least 2-3 sentences) explaining the technical implementation, method, and expected outcome.
+   - Each Work Package MUST have 2-3 clear deliverables.
+   - For EACH Work Package, you MUST also create a narrative summary in "dynamicSections" using keys like "work_package_1", "work_package_2", etc. The narrative summary should be 3-4 paragraphs of high-level technical text.
 3. **SECTION MAPPING**: 
    - You MUST fill content for EVERY key listed in the "STRUCTURE TO FOLLOW" section below.
    - If you see a key like "applicant_organisation", provide a technical description of "${partners[0]?.name}".
    - If you see a key like "participating_organisations", describe the synergy between ALL partners.
-4. **EXACT BUDGET**: The total budget MUST be exactly ${budgetNum} EUR. Distribute it realistically among Personnel, Equipment, and Travel.
+4. **EXACT BUDGET**: The total budget MUST be exactly ${budgetNum} EUR. Distribute it realistically among Personnel, Equipment, and Travel. Ensure the sum of "estimatedBudget" in ALL activities across ALL WPs equals exactly ${budgetNum} EUR.
 5. **NO HALLUCINATIONS**: Do NOT invent partners. Use ONLY the ${partners.length} organizations provided.
 
 STRUCTURE TO FOLLOW (MANDATORY KEYS):
@@ -279,29 +282,31 @@ STRICT JSON OUTPUT FORMAT (FOLLOW EXACTLY):
   "workPackages": [
     {
       "name": "WP1: Project Management",
-      "description": "Exhaustive management narrative...",
+      "description": "Exhaustive management narrative summary...",
       "duration": "M1-M24",
       "activities": [
-        { "name": "Project Coordination", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} },
-        { "name": "Quality Assurance", "description": "...", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
+        { "name": "Project Coordination & Quality Assurance", "description": "Continuous monitoring of project milestones, ensuring adherence to quality standards and timeline. Regular steering committee meetings and risk mitigation sessions.", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.1)} },
+        { "name": "Financial Management & Reporting", "description": "Oversight of budget allocation, expense tracking, and preparation of periodic financial reports for the funding agency. Ensuring compliance with financial regulations.", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} },
+        { "name": "Internal Communication Infrastructure", "description": "Establishment of collaborative platforms, cloud storage, and communication protocols to ensure seamless data exchange and synchronization between all partners.", "leadPartner": "${partners[0]?.name}", "estimatedBudget": ${Math.floor(personnelBudget * 0.05)} }
       ],
-      "deliverables": ["Management Plan", "Progress Report"]
+      "deliverables": ["Management Plan", "Quality Manual", "Financial Reports"]
     }
   ],
   "budget": [
     {
       "item": "Personnel",
       "cost": ${personnelBudget},
-      "description": "Staff costs for all partners.",
+      "description": "Staff costs for all partners including researchers, technicians, and administrators.",
       "breakdown": [{ "subItem": "Researchers", "quantity": 1, "unitCost": ${personnelBudget}, "total": ${personnelBudget} }],
-      "partnerAllocations": [${partners.map((p: any) => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / partners.length)} }`).join(', ')}]
+      "partnerAllocations": [${partners.map((p: any) => `{ "partner": "${p.name}", "amount": ${Math.floor(personnelBudget / (partners.length || 1))} }`).join(', ')}]
     }
   ],
-  "risks": [{ "risk": "Technical delay", "likelihood": "Low", "impact": "High", "mitigation": "Proper planning..." }],
-  "summary": "Full project summary (HTML)...",
+  "risks": [{ "risk": "Technical delay", "likelihood": "Low", "impact": "High", "mitigation": "Proper planning and alternative resource allocation." }],
+  "summary": "Full project summary (HTML formatted with <p>, <ul>, <strong>)...",
   "dynamicSections": {
     "key_from_structure_above": "HTML technical narrative...",
-    "work_package_1": "Narrative for WP1..."
+    "work_package_1": "Narrative for WP1...",
+    "work_package_2": "Narrative for WP2..."
   }
 }
 
