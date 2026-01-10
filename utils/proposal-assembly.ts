@@ -13,6 +13,19 @@ export interface DisplaySection {
     charLimit?: number;
 }
 
+/**
+ * Robustly extracts a WP index from strings like "Work package n°1", "WP 2", "WP3: title"
+ */
+function extractWPIndex(text: string): number | undefined {
+    if (!text) return undefined;
+    // Matches: WP1, WP 1, Work Package 1, Work Package n°1, WP no.1 etc.
+    const match = text.match(/(?:Work\s*Package|WP)\s*(?:n°|no\.?|#|number)?\s*(\d+)/i);
+    if (match) {
+        return parseInt(match[1]) - 1;
+    }
+    return undefined;
+}
+
 function cleanTitle(title: string): string {
     if (!title) return '';
     let t = title
@@ -48,9 +61,17 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     let lastWPRelevantIndex = -1;
     let lastWPLevel = 2;
 
-    // 1. Executive Summary (Always First)
+    // 1. Check if template has a summary section to avoid double-rendering
+    const hasTemplateSummary = fundingScheme?.template_json?.sections?.some((s: any) =>
+        s.key === 'summary' ||
+        s.key === 'abstract' ||
+        s.key === 'project_summary' ||
+        s.label.toLowerCase().includes('summary')
+    );
+
     const summaryContent = proposal.summary || (proposal as any).abstract || dynamicSections['summary'] || dynamicSections['abstract'];
-    if (summaryContent) {
+
+    if (summaryContent && !hasTemplateSummary) {
         finalDocument.push({ id: 'summary', title: 'Executive Summary', content: summaryContent, level: 1 });
         renderedKeys.add('summary');
         renderedKeys.add('abstract');
@@ -91,23 +112,11 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                     key.includes('workplan') ||
                     key.includes('tasks');
 
-                let wpIdx: number | undefined = undefined;
+                let wpIdx: number | undefined = extractWPIndex(ts.key || key) ?? extractWPIndex(ts.label);
 
-                const lookupKey = ts.key || key;
-                const keyMatch = lookupKey.match(/work_package_(\d+)/i) ||
-                    lookupKey.match(/workpackage(\d+)/i) ||
-                    lookupKey.match(/wp(\d+)/i);
-
-                if (isWP || keyMatch) {
+                if (isWP || wpIdx !== undefined) {
                     lastWPLevel = level;
-
-                    // Priority 1: Extraction from key/label
-                    const wpMatch = keyMatch ||
-                        ts.label.match(/Work Package\s*(\d+)/i) ||
-                        ts.label.match(/WP\s*(\d+)/i);
-
-                    if (wpMatch) {
-                        wpIdx = parseInt(wpMatch[1]) - 1;
+                    if (wpIdx !== undefined) {
                         renderedWPIndices.add(wpIdx);
                     }
 

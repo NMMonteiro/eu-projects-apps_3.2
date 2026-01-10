@@ -275,52 +275,15 @@ function createWorkPackageTable(wps: WorkPackage[], currency: string = "EUR"): T
   // Header
   rows.push(new TableRow({
     children: [
-      createTableHeaderCell("WP No."),
-      createTableHeaderCell("Work Package Name"),
-      createTableHeaderCell("Activities & Deliverables"),
+      createTableHeaderCell("No."),
+      createTableHeaderCell("Work Package Title"),
       createTableHeaderCell("Budget"),
     ]
   }));
 
   wps.forEach((wp, idx) => {
-    const activityItems: Paragraph[] = [];
-
     // Calculate WP Budget
     const wpBudget = (wp.activities || []).reduce((sum, act: any) => sum + (act.estimatedBudget || act.cost || 0), 0);
-
-    // Add activities if they exist
-    if (wp.activities && wp.activities.length > 0) {
-      activityItems.push(new Paragraph({
-        children: [new TextRun({ text: "Activities:", bold: true, font: FONT, size: 18, color: COLOR_PRIMARY })],
-        spacing: { before: 80, after: 40 }
-      }));
-      wp.activities.forEach(act => {
-        activityItems.push(new Paragraph({
-          children: [new TextRun({ text: `• ${act.name}`, bold: true, font: FONT, size: 18 })],
-          spacing: { before: 20 }
-        }));
-        if (act.description) {
-          activityItems.push(new Paragraph({
-            children: [new TextRun({ text: `  ${act.description}`, font: FONT, size: 16, color: "666666" })],
-            spacing: { after: 40 }
-          }));
-        }
-      });
-    }
-
-    // Add deliverables
-    if (wp.deliverables && wp.deliverables.length > 0) {
-      activityItems.push(new Paragraph({
-        children: [new TextRun({ text: "Deliverables:", bold: true, font: FONT, size: 18, color: COLOR_PRIMARY })],
-        spacing: { before: 80, after: 40 }
-      }));
-      wp.deliverables.forEach(del => {
-        activityItems.push(new Paragraph({
-          children: [new TextRun({ text: `• ${del}`, font: FONT, size: 18 })],
-          spacing: { before: 20, after: 20 }
-        }));
-      });
-    }
 
     rows.push(new TableRow({
       children: [
@@ -331,12 +294,9 @@ function createWorkPackageTable(wps: WorkPackage[], currency: string = "EUR"): T
         }),
         new TableCell({
           children: [
-            new Paragraph({ children: [new TextRun({ text: wp.name, bold: true, font: FONT, size: BODY_SIZE })] }),
-            ...convertHtmlToParagraphs(wp.description, "WP Description")
-          ]
-        }),
-        new TableCell({
-          children: activityItems.length > 0 ? activityItems : [new Paragraph({ text: "-" })]
+            new Paragraph({ children: [new TextRun({ text: wp.name, bold: true, font: FONT, size: BODY_SIZE })] })
+          ],
+          verticalAlign: VerticalAlign.CENTER
         }),
         new TableCell({
           children: [new Paragraph({
