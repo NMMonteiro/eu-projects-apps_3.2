@@ -172,6 +172,7 @@ STRICT FORMATTING & LOGIC RULES:
 
 STRICT BUDGET & DATA TYPE RULES:
 - The following sections MUST BE JSON ARRAYS, not strings or HTML: 'budget', 'risks', 'workPackages', 'timeline', 'partners'.
+- NESTED UPDATES (Work Packages): If the user asks to update an activity or task (e.g., "improve activity 2.1"), you MUST update the 'workPackages' section. Your "content" field will be the FULL updated 'workPackages' array with the improved activity text injected into the correct WP and activity index.
 - If the user asks to update 'budget', your "content" field MUST be a JSON array of objects following the exact structure: [{ "item": "string", "description": "string", "cost": number, "breakdown": [{ "subItem": "string", "quantity": number, "unitCost": number, "total": number }] }].
 - REALISTIC RESEARCH & PRICING: Use current 2026 market rates. Examples: VR Headsets (Meta Quest 3 level) ~€550-€700; Senior Researcher/Expert rate ~€350-€500/day; Hosting/Metaverse infra ~€1,000-€3,000/year; AI API Subscriptions ~€50-€200/month.
 - DETAILED SUB-ITEMS: Do not provide empty breakdowns. Every budget category must have 2-4 specific sub-items (e.g., Personnel should break down into specific roles; Hardware should list specific devices).
@@ -183,10 +184,10 @@ To perform an update, your response MUST be a JSON object with this structure:
   "action": "update_section",
   "section": "section_name_key",
   "content": <String for narrative OR Array for structured sections>,
-  "explanation": "I have updated the budget using realistic market rates for 2026, including specific allocations for 10 VR sets, hosting, and AI tools as requested. The total is exactly €250,000."
+  "explanation": "I have improved the description for Activity 2.1 in WP2 by adding specific details about VR prototyping and user testing."
 }
 
-The "section_name_key" must be one of the keys in the context (e.g., 'methodology', 'risks', 'budget', 'objectives', 'summary', etc.).
+The "section_name_key" must be the root key (e.g., 'workPackages' for activity changes, 'budget' for budget changes).
 The "explanation" is what I will show to the user.
 
 If the user is just asking a question, reply with normal text (not JSON).` }],
