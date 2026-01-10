@@ -18,7 +18,6 @@ const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
 
 /**
  * EXTREME WP Index extraction.
- * Catches "WP2", "Work package 2", "WP 2 activities", etc.
  */
 function extractWPIndex(text: string): number | undefined {
     if (!text) return undefined;
@@ -27,16 +26,24 @@ function extractWPIndex(text: string): number | undefined {
     return undefined;
 }
 
+/**
+ * PURE Sanitizer: Removes nulls, underscores, and LEADING WP PREFIXES.
+ * The 'decoration' (adding WP1: etc) is handled by the caller who knows the index.
+ */
 function cleanTitle(title: string): string {
     if (!title) return '';
+    // 1. Basic cleanup
     let t = title.replace(/undefined/gi, '').replace(/\(?\s*null\s*\)?/gi, '').replace(/-\s*null/gi, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-    // Remove trailing dashes often found in templates
+    // 2. Trim trailing dashes
     t = t.replace(/\s*-\s*$/, '');
+    // 3. STRIP leading WP prefixes and artifacts like "WP1:" or "Work Package 1 -"
+    t = t.replace(/^(WP\d+[:\s\.-]*)+/i, '');
+    t = t.replace(/^Work\s*Package\s*(?:n°|no\.?|#)?\s*\d+\s*[:\.-]*/i, '');
 
-    t = t.replace(/^(WP\d+[:\s]+)+/i, (match) => {
-        const first = match.match(/WP\d+/i);
-        return first ? `${first[0].toUpperCase()}: ` : '';
-    });
+    t = t.trim();
+    // 4. Default if empty (e.g. original was just "WP1")
+    if (!t) return title;
+
     return t.replace(/^\w/, (c) => c.toUpperCase());
 }
 
@@ -91,7 +98,6 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 const bk = s.key || nl;
                 const wpIdx = extractWPIndex(bk) ?? extractWPIndex(s.label);
 
-                // WP Deduplication
                 if (wpIdx !== undefined && wpIdxToPoolKey.has(wpIdx)) {
                     if (s.subsections) processTemplate(s.subsections, level + 1);
                     return;
@@ -104,7 +110,9 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
                 normTitleToPoolKey.set(nl, pk);
 
                 sectionPool.set(pk, {
-                    id: pk, title: cleanTitle(s.label), description: s.description,
+                    id: pk,
+                    title: isWPHeader ? `Work Package ${wpIdx! + 1}: ${cleanTitle(s.label)}` : cleanTitle(s.label),
+                    description: s.description,
                     level: (isWPHeader || MASTER_ORDER[nl]) ? 1 : level,
                     wpIdx: wpIdx,
                     type: isWPHeader ? 'work_package' : (wpIdx !== undefined ? 'wp_item' : s.type),
@@ -117,7 +125,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         processTemplate(fundingScheme.template_json.sections);
     }
 
-    // 2. Ensure ALL 5 WP slots exist in wpIdxToPoolKey before merging dynamic content
+    // 2. Ensure ALL 5 WP slots exist
     [0, 1, 2, 3, 4].forEach(idx => {
         if (!wpIdxToPoolKey.has(idx)) {
             const id = `extra_wp_${idx}`;
@@ -129,7 +137,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    // 3. Merging Dynamic Content (Now with forced anchors)
+    // 3. Merge Dynamic Content
     Object.entries(dynamicSections).forEach(([key, val]) => {
         if (!val || typeof val !== 'string' || val.length < 10) return;
         const nk = normalize(key);
@@ -148,29 +156,32 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
         if (target) {
             const s = sectionPool.get(target)!;
-            // Always prefer the longest/most substantial content
             if (!s.content || val.length > s.content.length) s.content = val;
             else if (!s.content.includes(val.substring(0, 30))) s.content += "\n\n" + val;
         } else {
-            sectionPool.set(key, { id: key, title: cleanTitle(key), content: val, level: 1, wpIdx: wpIdx, order: getPriority(key) });
+            sectionPool.set(key, {
+                id: key,
+                title: wpIdx !== undefined ? `WP${wpIdx + 1}: ${cleanTitle(key)}` : cleanTitle(key),
+                content: val, level: 1, wpIdx: wpIdx, order: getPriority(key)
+            });
         }
     });
 
-    // 4. Final DB Sync (Win the Naming Battle)
+    // 4. Final DB Sync (Solves Double WP3: WP3: issue)
     workPackages.forEach((wp: any, idx: number) => {
         const key = wpIdxToPoolKey.get(idx);
         if (key) {
             const s = sectionPool.get(key)!;
-            // FORCE NAME OVERWRITE: if DB has a real name, use it. 
-            // Avoid generic names like "Work package n2 -" or "WP2: activities"
-            const isGeneric = s.title.toLowerCase().includes('n°') || s.title.toLowerCase().includes('activities') || s.title.length < 20;
-            if (wp.name && (isGeneric || wp.name.length > s.title.length)) {
-                s.title = `WP${idx + 1}: ${cleanTitle(wp.name)}`;
+            const dbName = wp.name ? cleanTitle(wp.name) : "";
+            const isGeneric = s.title.toLowerCase().includes('n°') || s.title.toLowerCase().includes('activities') || s.title.toLowerCase().includes('loading') || s.title.length < 20;
+
+            if (dbName && (isGeneric || dbName.length + 5 > s.title.length)) {
+                s.title = `WP${idx + 1}: ${dbName}`;
             }
             if (wp.description && (!s.content || wp.description.length > s.content.length)) {
                 s.content = wp.description;
             }
-            s.type = 'work_package'; // Ensure it's a card
+            s.type = 'work_package';
         }
     });
 
