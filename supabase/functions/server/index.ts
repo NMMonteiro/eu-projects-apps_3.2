@@ -592,16 +592,18 @@ Return ONLY valid JSON, no other text.`;
             });
 
             // NEW: Expert Intelligence Retrieval (RAG)
-            console.log('🧠 Retrieving expert intelligence for RAG...');
             const retriever = new KnowledgeRetriever();
             const smartKeywords = KnowledgeRetriever.extractSmartKeywords(
                 `${fundingScheme?.name || ''} ${idea.title} ${idea.description} ${userPrompt || ''}`
             );
 
-            const expertKnowledge = await retriever.getRelevantKnowledge(smartKeywords, 5);
+            console.log(`🧠 [RAG] Keywords: ${smartKeywords.join(', ')}`);
+            const ragStart = Date.now();
+            const expertKnowledge = await retriever.getRelevantKnowledge(smartKeywords, 4);
+            console.log(`✅ [RAG] Completed in ${Date.now() - ragStart}ms. Length: ${expertKnowledge?.length || 0}`);
 
             if (expertKnowledge) {
-                console.log(`✅ Found ${smartKeywords.length} relevant keywords and retrieved expert context.`);
+                console.log(`✅ [RAG] Found relevant context for ${smartKeywords.length} keywords.`);
             }
 
             const prompt = PromptBuilder.buildProposalPrompt(
@@ -618,14 +620,15 @@ Return ONLY valid JSON, no other text.`;
                 ? `${prompt}\n\n### EXPERT INTELLIGENCE (MANDATORY GUIDELINES TO FOLLOW):\n${expertKnowledge}`
                 : prompt;
 
-            console.log(`🚀 Generating proposal with Gemini 2.0 Flash. Prompt length: ${fullyInformedPrompt.length} chars`);
+            console.log(`🚀 [GENERATE] Sending to Gemini 2.0 Flash. Prompt length: ${fullyInformedPrompt.length}`);
 
             const startTime = Date.now();
             const result = await model.generateContent(fullyInformedPrompt).catch(e => {
-                console.error('AI generation call failed:', e);
+                console.error('❌ [GENERATE] AI call failed:', e);
                 throw new Error(`AI generation failed: ${e.message}`);
             });
             const text = result.response.text();
+            console.log(`✅ [GENERATE] AI responded in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Body size: ${text.length}`);
             console.log(`✅ AI responded in ${((Date.now() - startTime) / 1000).toFixed(1)}s with ${text.length} characters.`);
 
             if (!text) {

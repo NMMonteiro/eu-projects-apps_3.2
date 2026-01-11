@@ -28,31 +28,31 @@ export class KnowledgeRetriever {
 
             console.log(`[RAG] Searching knowledge for: ${keywords.join(', ')}`);
 
-            // Clean and prepare keywords for ILIKE search
-            const searchTerms = keywords.map(kw => `%${kw.toLowerCase()}%`);
+            console.log(`🔍 [RAG] Fetching for keywords: ${keywords.join(', ')}`);
 
-            // Search in content column
-            const orFilters = searchTerms.map(term => `content.ilike.${term}`).join(',');
+            // Loop through keywords to avoid complex OR strings that break PostgREST
+            const results: any[] = [];
+            for (const kw of keywords.slice(0, 5)) { // Limit to top 5 keywords for speed
+                const { data, error } = await this.supabase
+                    .from('global_knowledge')
+                    .select('source_name, content, metadata')
+                    .ilike('content', `%${kw}%`)
+                    .limit(2);
 
-            const { data, error } = await this.supabase
-                .from('global_knowledge')
-                .select('source_name, content, metadata')
-                .or(orFilters)
-                .limit(limit);
-
-            if (error) {
-                console.error('[RAG] Retrieval error:', error);
-                return '';
+                if (data) results.push(...data);
+                if (error) console.warn(`[RAG] Keyword ${kw} failed:`, error.message);
             }
 
-            if (!data || data.length === 0) {
+            if (results.length === 0) {
                 console.log('[RAG] No relevant chunks found in library.');
                 return '';
             }
 
-            console.log(`[RAG] Found ${data.length} relevant intelligence chunks.`);
+            // Deduplicate results by content
+            const uniqueResults = Array.from(new Map(results.map(item => [item.content, item])).values());
+            console.log(`[RAG] Found ${uniqueResults.length} unique intelligence chunks.`);
 
-            return data.map(chunk => `
+            return uniqueResults.map(chunk => `
 --- EXPERT KNOWLEDGE: ${chunk.source_name} (${chunk.metadata?.type || 'Guideline'}) ---
 ${chunk.content}
 `).join('\n');
