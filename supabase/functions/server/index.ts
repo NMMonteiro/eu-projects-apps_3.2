@@ -1329,10 +1329,9 @@ Return ONLY valid JSON, no other text.`;
 
                 console.log(`Uploaded file ${uploadResponse.file.displayName} as: ${uploadResponse.file.uri}`);
 
-                // AI Parsing
+                // Using Gemini 2.0 Flash for superior PDF parsing
                 const ai = getAI();
-                // Reverting to 2.0-flash-exp as requested
-                const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+                const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
                 const prompt = `Extract all possible partner organization information from the attached PDF file (PIF - Partner Information Form).
                 
