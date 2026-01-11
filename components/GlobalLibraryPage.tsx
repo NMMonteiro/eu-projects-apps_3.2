@@ -73,7 +73,8 @@ export function GlobalLibraryPage() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${publicAnonKey}`
+                        'Authorization': `Bearer ${publicAnonKey}`,
+                        'apikey': publicAnonKey
                     },
                     body: JSON.stringify({
                         fileUrl: file.name,
