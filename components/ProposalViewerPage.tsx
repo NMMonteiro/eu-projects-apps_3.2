@@ -264,6 +264,7 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
         };
 
         setProposal(updatedProposal);
+        setIsPartnerModalOpen(false); // Close modal on confirm
 
         // Save to backend
         try {
