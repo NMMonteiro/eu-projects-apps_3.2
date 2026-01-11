@@ -40,9 +40,6 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                 role: '',
                 logoUrl: undefined,
                 pdfUrl: undefined,
-                contactPersonName: undefined,
-                contactPersonEmail: undefined,
-                contactPersonPhone: undefined,
                 experience: undefined,
                 keywords: undefined,
                 organisationId: '',
@@ -56,11 +53,15 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                 postcode: '',
                 region: '',
                 department: '',
+                legalNameNational: '',
                 legalRepName: '',
                 legalRepPosition: '',
                 legalRepEmail: '',
                 legalRepPhone: '',
+                contactPersonName: '',
                 contactPersonPosition: '',
+                contactPersonPhone: '',
+                contactPersonEmail: '',
                 contactPersonRole: '',
                 staffSkills: '',
                 relevantProjects: '',
@@ -204,7 +205,7 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                 <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label>Partner Name *</Label>
+                            <Label>Partner Name (Latin/English) *</Label>
                             <Input
                                 value={partner.name || ''}
                                 onChange={(e) => updateField('name', e.target.value)}
@@ -212,11 +213,29 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                             />
                         </div>
                         <div>
+                            <Label>Legal Name (National Language)</Label>
+                            <Input
+                                value={partner.legalNameNational || ''}
+                                onChange={(e) => updateField('legalNameNational', e.target.value)}
+                                placeholder="Universidade de Exemplo"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
                             <Label>Acronym</Label>
                             <Input
                                 value={partner.acronym || ''}
                                 onChange={(e) => updateField('acronym', e.target.value)}
                                 placeholder="UoE"
+                            />
+                        </div>
+                        <div>
+                            <Label>PIC Number</Label>
+                            <Input
+                                value={partner.pic || ''}
+                                onChange={(e) => updateField('pic', e.target.value)}
+                                placeholder="999888777"
                             />
                         </div>
                     </div>
@@ -421,6 +440,71 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                                 value={partner.contactPersonPhone || ''}
                                 onChange={(e) => updateField('contactPersonPhone', e.target.value)}
                                 placeholder="+351 123 456 789"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Position</Label>
+                            <Input
+                                value={partner.contactPersonPosition || ''}
+                                onChange={(e) => updateField('contactPersonPosition', e.target.value)}
+                                placeholder="Project Manager"
+                            />
+                        </div>
+                        <div>
+                            <Label>Role/Department</Label>
+                            <Input
+                                value={partner.contactPersonRole || ''}
+                                onChange={(e) => updateField('contactPersonRole', e.target.value)}
+                                placeholder="Administrative / Technical"
+                            />
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Legal Representative</CardTitle>
+                    <CardDescription>The person authorized to sign for the organization</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Full Name</Label>
+                            <Input
+                                value={partner.legalRepName || ''}
+                                onChange={(e) => updateField('legalRepName', e.target.value)}
+                                placeholder="Jane Doe"
+                            />
+                        </div>
+                        <div>
+                            <Label>Position / Title</Label>
+                            <Input
+                                value={partner.legalRepPosition || ''}
+                                onChange={(e) => updateField('legalRepPosition', e.target.value)}
+                                placeholder="CEO / Rector / Director"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label>Email</Label>
+                            <Input
+                                type="email"
+                                value={partner.legalRepEmail || ''}
+                                onChange={(e) => updateField('legalRepEmail', e.target.value)}
+                                placeholder="jane.doe@example.com"
+                            />
+                        </div>
+                        <div>
+                            <Label>Phone</Label>
+                            <Input
+                                type="tel"
+                                value={partner.legalRepPhone || ''}
+                                onChange={(e) => updateField('legalRepPhone', e.target.value)}
+                                placeholder="+351 987 654 321"
                             />
                         </div>
                     </div>

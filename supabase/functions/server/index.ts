@@ -1457,6 +1457,40 @@ Return ONLY valid JSON, no other text.`;
                   * Sport federation
                   * Sport league
                   * Youth organisation
+                  - Name and Acronym
+                - Full Legal Name (National Language)
+                - Organisation ID (OID) and PIC (often format E12345678 and 9-digit number)
+                - National ID (Business ID) or Registration Number
+                - VAT Number
+                - Organisation Type (PICK ONE from this list only):
+                  * Accreditation, certification or qualification body
+                  * Counselling body
+                  * European grouping of territorial cooperation
+                  * European or international public body
+                  * Foundation
+                  * Higher education institution (tertiary level)
+                  * Large enterprise
+                  * Local Public body
+                  * National Public body
+                  * National Youth Council
+                  * Non-governmental organisation/association
+                  * Organisation or association representing (parts of) the sport sector
+                  * Public service provider
+                  * Regional Public body
+                  * Research Institute/Centre
+                  * School/Institute/Educational centre – Adult education
+                  * School/Institute/Educational centre – General education (pre-primary level)
+                  * School/Institute/Educational centre – General education (primary level)
+                  * School/Institute/Educational centre – General education (secondary level)
+                  * School/Institute/Educational centre – Vocational Training (secondary level)
+                  * School/Institute/Educational centre – Vocational Training (tertiary level)
+                  * Small and medium sized enterprise
+                  * Social enterprise
+                  * Social partner or other representative of working life (chambers of commerce, trade union, trade association)
+                  * Sport club
+                  * Sport federation
+                  * Sport league
+                  * Youth organisation
                   If the value is not found or not clear, pick the most logically similar one from this list. Do not use any other values.
                 - Public Body (boolean) and Non-profit (boolean) status
                 - Legal Address (Street), City, Postcode, Country, Region
@@ -1464,18 +1498,21 @@ Return ONLY valid JSON, no other text.`;
                 - Website and Main Contact Email
                 - Brief Description (summary of organization)
                 - Expertise, Experience, staff skills, and previous relevant projects
-                - Contact Person details (Name, Email, Phone, Role)
+                - Legal Representative Person (Name, Position, Email, Phone)
+                - Contact Person details (Name, Position, Email, Phone, Role)
 
                 Return ONLY a valid JSON object. 
                 CRITICAL: For fields where data is not found in the PDF, return an empty string "" instead of null or omitting the field.
                 
                 {
-                  "name": "full legal name",
+                  "name": "full legal name (latin characters)",
+                  "legalNameNational": "full legal name (national language)",
                   "acronym": "acronym (string or empty)",
-                  "organisationId": "OID/PIC (string or empty)",
+                  "organisationId": "OID (e.g. E10176763)",
+                  "pic": "PIC (e.g. 940898255)",
                   "vatNumber": "VAT (string or empty)",
-                  "businessId": "Business ID (string or empty)",
-                  "organizationType": "SME/University/etc",
+                  "businessId": "National ID / Registration ID",
+                  "organizationType": "Pick exactly from list provided",
                   "isPublicBody": true/false,
                   "isNonProfit": true/false,
                   "legalAddress": "street address",
@@ -1483,7 +1520,7 @@ Return ONLY valid JSON, no other text.`;
                   "postcode": "postcode",
                   "country": "country",
                   "region": "region",
-                  "website": "URL",
+                  "website": "Main Website URL",
                   "contactEmail": "general email",
                   "department": "department name",
                   "description": "summary text",
@@ -1491,12 +1528,16 @@ Return ONLY valid JSON, no other text.`;
                   "staffSkills": "personnel skills",
                   "relevantProjects": "list of projects",
                   "keywords": ["kw1", "kw2"],
-                  "contactPersonName": "name",
-                  "contactPersonEmail": "email",
-                  "contactPersonPhone": "phone",
-                  "contactPersonRole": "role"
+                  "legalRepName": "Legal Rep Name",
+                  "legalRepPosition": "Legal Rep Position",
+                  "legalRepEmail": "Legal Rep Email",
+                  "legalRepPhone": "Legal Rep Phone",
+                  "contactPersonName": "Contact Person Name",
+                  "contactPersonPosition": "Contact Person Position",
+                  "contactPersonEmail": "Contact Person Email",
+                  "contactPersonPhone": "Contact Person Phone",
+                  "contactPersonRole": "Contact Person Role"
                 }`;
-
 
                 let result;
                 try {
@@ -1576,13 +1617,13 @@ Return ONLY valid JSON, no other text.`;
                     name: newPartner.name,
                     legal_name_national: newPartner.legalNameNational,
                     acronym: newPartner.acronym,
-                    organisation_id: newPartner.organisationId,
-                    pic: newPartner.pic,
+                    organisation_id: newPartner.organisationId || newPartner.pic,
+                    pic: newPartner.pic || newPartner.organisationId,
                     vat_number: newPartner.vatNumber,
                     business_id: newPartner.businessId,
                     organization_type: newPartner.organizationType,
-                    is_public_body: newPartner.isPublicBody,
-                    is_non_profit: newPartner.isNonProfit,
+                    is_public_body: newPartner.isPublicBody === true,
+                    is_non_profit: newPartner.isNonProfit === true,
                     country: newPartner.country,
                     legal_address: newPartner.legalAddress,
                     city: newPartner.city,
@@ -1592,9 +1633,9 @@ Return ONLY valid JSON, no other text.`;
                     website: newPartner.website,
                     description: newPartner.description,
                     department: newPartner.department,
-                    keywords: newPartner.keywords,
-                    logo_url: newPartner.logoUrl,
-                    pdf_url: newPartner.pdfUrl,
+                    keywords: Array.isArray(newPartner.keywords) ? newPartner.keywords : [],
+                    logo_url: newPartner.logoUrl || null,
+                    pdf_url: newPartner.pdfUrl || null,
                     legal_rep_name: newPartner.legalRepName,
                     legal_rep_position: newPartner.legalRepPosition,
                     legal_rep_email: newPartner.legalRepEmail,
