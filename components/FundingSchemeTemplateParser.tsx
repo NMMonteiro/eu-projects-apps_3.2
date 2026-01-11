@@ -109,7 +109,7 @@ export function FundingSchemeTemplateParser() {
             const { error } = await supabase
                 .from('funding_schemes')
                 .insert({
-                    name: fundingSchemeName,
+                    name: `${fundingSchemeName} (Imported ${new Date().toLocaleTimeString()})`,
                     description: `Imported from ${file?.name || 'uploaded document'}`,
                     template_json: {
                         schemaVersion: '1.0',
