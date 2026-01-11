@@ -337,7 +337,16 @@ function createWorkPackageTable(wps: WorkPackage[], currency: string = "EUR"): T
   });
 }
 
-function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string, allowedNames?: string[]): (Paragraph | Table)[] {
+function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?: string, currentPartners?: any[]): (Paragraph | Table)[] {
+  // 0. Preparation: Build a list of allowed partner names for filtering
+  const allowedNames = currentPartners?.flatMap(p => [
+    (p.name || "").toLowerCase(),
+    (p.acronym || "").toLowerCase(),
+    (p.legalNameNational || "").toLowerCase(),
+    (p.legal_name || "").toLowerCase(),
+    (p.legal_name_national || "").toLowerCase(),
+  ]).filter(name => name && name.length > 2) || [];
+
   // 1. Clean HTML and get structured text
   let text = cleanHtml(html);
 
@@ -346,6 +355,22 @@ function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?:
 
   // 3. Fix squashed labels
   text = fixSquashedText(text);
+
+  // 3.5. Smart Filtering for Partner-heavy sections (EXPERIMENTAL)
+  const isPartnerSection = (sectionTitle || "").toLowerCase().includes("partner") || (sectionTitle || "").toLowerCase().includes("organisation");
+  if (isPartnerSection && allowedNames.length > 0) {
+    // Handle comma-separated list of partners: "Partner A (OID: ...), Partner B (OID: ...)"
+    // We try to identify these blocks and filter them
+    const partnerBlocks = text.split(/,\s*(?=[^,]+?\s*\((?:OID|PIC|OID\/PIC):\s*[A-Z0-9]+)/gi);
+    if (partnerBlocks.length > 1) {
+      text = partnerBlocks
+        .filter(block => {
+          const blockLower = block.toLowerCase();
+          return allowedNames.some(name => blockLower.includes(name));
+        })
+        .join(", ");
+    }
+  }
 
   // 4. Split into lines and join probable split labels
   const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -371,7 +396,7 @@ function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?:
     }
 
     // Filtering Logic: If we have allowedNames and this line looks like a partner header
-    if (allowedNames && allowedNames.length > 0) {
+    if (allowedNames && allowedNames.length > 0 && isPartnerSection) {
       const colonIdx = current.indexOf(':');
       if (colonIdx > 0 && colonIdx < 60) {
         const potentialName = current.substring(0, colonIdx).toLowerCase();
@@ -538,7 +563,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
     // 2. EXECUTIVE SUMMARY (Always first as Part A)
     docChildren.push(createSectionHeader("Part B: Technical Narrative", 1));
     docChildren.push(createSectionHeader("0. Executive Summary", 2));
-    docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary"));
+    docChildren.push(...convertHtmlToParagraphs(p.summary, "Executive Summary", p.partners));
 
     // 3. ASSEMBLED SECTIONS (STRICT ORDER)
     const finalDocument = assembleDocument(p).filter(s => s.id !== 'summary');
@@ -571,7 +596,7 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
 
       // Narrative Content
       if (section.content) {
-        docChildren.push(...convertHtmlToParagraphs(section.content, section.title));
+        docChildren.push(...convertHtmlToParagraphs(section.content, section.title, p.partners));
       }
 
       // Structured Data
