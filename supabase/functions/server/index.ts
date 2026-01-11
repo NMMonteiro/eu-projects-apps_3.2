@@ -969,7 +969,11 @@ Return ONLY valid JSON, no other text.`;
             const kvPartners = await KV.getByPrefix('partner:');
             const allPartners = [...mappedPartners];
             kvPartners.forEach(kvp => {
-                if (!allPartners.find(p => p.id === kvp.id)) {
+                const alreadyExists = allPartners.find(p =>
+                    p.id === kvp.id ||
+                    p.name.toLowerCase() === kvp.name.toLowerCase()
+                );
+                if (!alreadyExists) {
                     allPartners.push(kvp);
                 }
             });
