@@ -131,65 +131,56 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
             // 2. HYDRATE PARTNERS (Critical for DOCX technical data)
             if (data.partners && data.partners.length > 0) {
                 try {
-                    const partnerIds = data.partners.map((p: any) => p.id).filter(Boolean);
-                    if (partnerIds.length > 0) {
-                        // Only query UUIDs from Supabase to avoid type cast errors
-                        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-                        const validUuidIds = partnerIds.filter((id: string) => uuidRegex.test(id));
+                    console.log(`Hydrating ${data.partners.length} partners...`);
+                    const response = await fetch(`${serverUrl}/partners`, {
+                        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+                    });
 
-                        console.log("Hydrating partners. Total IDs:", partnerIds.length, "Valid UUIDs:", validUuidIds.length);
+                    if (response.ok) {
+                        const { partners: allRegisteredPartners } = await response.json();
 
-                        let dbPartners: any[] = [];
-                        if (validUuidIds.length > 0) {
-                            const { data: partners, error: partnersError } = await supabase
-                                .from('partners')
-                                .select('*')
-                                .in('id', validUuidIds);
-
-                            if (partnersError) {
-                                console.error('Partner hydration query failed:', partnersError);
-                            } else if (partners) {
-                                dbPartners = partners;
-                            }
-                        }
-
-                        if (dbPartners.length > 0) {
-                            console.log(`Found ${dbPartners.length} matching partners in DB. Merging technical metadata...`);
-                            // Merge DB metadata into current partners (preserving project-specific roles/descriptions)
+                        if (allRegisteredPartners && allRegisteredPartners.length > 0) {
                             data.partners = data.partners.map((p: any) => {
-                                const dbp = dbPartners.find(db => db.id === p.id);
-                                if (!dbp) return p;
+                                // Match by ID or Name (as fallback for transient partners)
+                                const found = allRegisteredPartners.find((ap: any) =>
+                                    ap.id === p.id ||
+                                    (p.name && ap.name === p.name)
+                                );
+
+                                if (!found) return p;
+
+                                // Merge found data into current partner object
                                 return {
-                                    ...p, // Keep project specific role/narrative (isCoordinator if already set)
-                                    id: dbp.id,
-                                    name: dbp.name || p.name,
-                                    legalNameNational: dbp.legal_name_national || p.legalNameNational || p.name,
-                                    acronym: dbp.acronym || p.acronym,
-                                    organisationId: dbp.organisation_id || dbp.pic || p.organisationId,
-                                    pic: dbp.pic || p.pic,
-                                    vatNumber: dbp.vat_number || p.vatNumber,
-                                    businessId: dbp.business_id || p.businessId,
-                                    organizationType: dbp.organization_type || p.organizationType,
-                                    country: dbp.country || p.country,
-                                    legalAddress: dbp.legal_address || p.legalAddress,
-                                    city: dbp.city || p.city,
-                                    postcode: dbp.postcode || p.postcode,
-                                    region: dbp.region || p.region,
-                                    website: dbp.website || p.website,
-                                    contactEmail: dbp.contact_email || p.contactEmail,
-                                    contactPersonName: dbp.contact_person_name || p.contactPersonName,
-                                    contactPersonEmail: dbp.contact_person_email || p.contactPersonEmail,
-                                    contactPersonPhone: dbp.contact_person_phone || p.contactPersonPhone,
-                                    contactPersonRole: dbp.contact_person_role || p.contactPersonRole,
-                                    legalRepName: dbp.legal_rep_name || p.legalRepName,
-                                    legalRepEmail: dbp.legal_rep_email || p.legalRepEmail,
-                                    legalRepPhone: dbp.legal_rep_phone || p.legalRepPhone,
-                                    legalRepPosition: dbp.legal_rep_position || p.legalRepPosition,
-                                    experience: dbp.experience || p.experience,
-                                    staffSkills: dbp.staff_skills || p.staffSkills,
-                                    relevantProjects: dbp.relevant_projects || p.relevantProjects,
-                                    isCoordinator: p.isCoordinator ?? p.is_coordinator ?? dbp.is_coordinator ?? (p.role === 'Coordinator'),
-                                    description: p.description || dbp.description // Prefer project-specific description
+                                    ...p,
+                                    id: found.id || p.id,
+                                    name: found.name || p.name,
+                                    legalNameNational: found.legalNameNational || p.legalNameNational || p.name,
+                                    acronym: found.acronym || p.acronym,
+                                    organisationId: found.organisationId || found.pic || p.organisationId,
+                                    pic: found.pic || p.pic,
+                                    vatNumber: found.vatNumber || p.vatNumber,
+                                    businessId: found.businessId || p.businessId,
+                                    organizationType: found.organizationType || p.organizationType,
+                                    country: found.country || p.country,
+                                    legalAddress: found.legalAddress || p.legalAddress,
+                                    city: found.city || p.city,
+                                    postcode: found.postcode || p.postcode,
+                                    region: found.region || p.region,
+                                    website: found.website || p.website,
+                                    contactEmail: found.contactEmail || p.contactEmail,
+                                    contactPersonName: found.contactPersonName || p.contactPersonName,
+                                    contactPersonEmail: found.contactPersonEmail || p.contactPersonEmail,
+                                    contactPersonPhone: found.contactPersonPhone || p.contactPersonPhone,
+                                    contactPersonRole: found.contactPersonRole || p.contactPersonRole,
+                                    legalRepName: found.legalRepName || p.legalRepName,
+                                    legalRepEmail: found.legalRepEmail || p.legalRepEmail,
+                                    legalRepPhone: found.legalRepPhone || p.legalRepPhone,
+                                    legalRepPosition: found.legalRepPosition || p.legalRepPosition,
+                                    experience: found.experience || p.experience,
+                                    staffSkills: found.staffSkills || p.staffSkills,
+                                    relevantProjects: found.relevantProjects || p.relevantProjects,
+                                    isCoordinator: p.isCoordinator ?? p.is_coordinator ?? found.isCoordinator ?? found.is_coordinator ?? (p.role === 'Coordinator'),
+                                    description: p.description || found.description
                                 };
                             });
                         }

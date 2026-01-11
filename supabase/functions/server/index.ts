@@ -958,7 +958,7 @@ Return ONLY valid JSON, no other text.`;
 
             if (error) throw error;
 
-            // Simple map back to camelCase for minimal fields used in listing
+            // Map back to camelCase with all fields for full hydration
             const mappedPartners = partners.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -966,24 +966,35 @@ Return ONLY valid JSON, no other text.`;
                 acronym: p.acronym,
                 country: p.country,
                 logoUrl: p.logo_url,
+                pdfUrl: p.pdf_url,
                 organisationId: p.organisation_id,
                 pic: p.pic,
                 vatNumber: p.vat_number,
                 businessId: p.business_id,
                 organizationType: p.organization_type,
+                isPublicBody: p.is_public_body,
+                isNonProfit: p.is_non_profit,
                 legalAddress: p.legal_address,
                 city: p.city,
                 postcode: p.postcode,
+                region: p.region,
+                website: p.website,
+                contactEmail: p.contact_email,
+                department: p.department,
                 contactPersonName: p.contact_person_name,
+                contactPersonPosition: p.contact_person_position,
                 contactPersonPhone: p.contact_person_phone,
                 contactPersonEmail: p.contact_person_email,
-                contactEmail: p.contact_email,
+                contactPersonRole: p.contact_person_role,
+                legalRepName: p.legal_rep_name,
+                legalRepPosition: p.legal_rep_position,
+                legalRepEmail: p.legal_rep_email,
+                legalRepPhone: p.legal_rep_phone,
                 description: p.description,
                 experience: p.experience,
                 staffSkills: p.staff_skills,
                 relevantProjects: p.relevant_projects,
                 keywords: p.keywords,
-                pdfUrl: p.pdf_url,
                 createdAt: p.created_at
             }));
 

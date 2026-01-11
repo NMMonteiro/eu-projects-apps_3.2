@@ -93,42 +93,55 @@ function sanitizeTitle(title: string): string {
  */
 function normalizePartner(p: any): Partner {
   if (!p) return {} as Partner;
+
   // Determine if this partner is a coordinator
   const isCoord =
     p.isCoordinator === true ||
     p.is_coordinator === true ||
     (p.role && p.role.toLowerCase().includes('coord')) ||
-    (p.contactPersonRole && p.contactPersonRole.toLowerCase().includes('coord'));
+    (p.contactPersonRole && (p.contactPersonRole as string).toLowerCase().includes('coord'));
 
   return {
     ...p,
     name: p.name || p.legalShortName || p.acronym || p.legal_name || p.legal_name_national || "Unknown Partner",
-    organisationId: p.organisationId || p.organisation_id || p.pic || p.oid || p.picNumber || "",
+    acronym: p.acronym || p.acronym_short || "",
+    organisationId: p.organisationId || p.organisation_id || p.pic || p.oid || p.picNumber || p.pic_number || "",
     vatNumber: p.vatNumber || p.vat_number || p.vat || "",
     businessId: p.businessId || p.business_id || p.registration_id || p.business_registration_id || "",
     organizationType: p.organizationType || p.organization_type || p.type || "",
+    isPublicBody: p.isPublicBody ?? p.is_public_body ?? false,
+    isNonProfit: p.isNonProfit ?? p.is_non_profit ?? false,
     legalNameNational: p.legalNameNational || p.legal_name_national || p.legalName || p.name || "",
     legalAddress: p.legalAddress || p.legal_address || p.office_address || p.address || "",
     country: p.country || p.legal_country || p.legalCountry || "",
     city: p.city || p.legal_city || p.legalCity || "",
     postcode: p.postcode || p.post_code || p.legal_postcode || p.zipCode || "",
+    region: p.region || p.legal_region || "",
     website: p.website || p.url || p.org_website || "",
     contactEmail: p.contactEmail || p.contact_email || p.email || "",
+    department: p.department || p.unit || p.dept || "",
+
+    // Legal Representative
     legalRepName: p.legalRepName || p.legal_rep_name || p.rep_name || "",
     legalRepPosition: p.legalRepPosition || p.legal_rep_position || p.rep_position || "",
     legalRepEmail: p.legalRepEmail || p.legal_rep_email || p.rep_email || "",
     legalRepPhone: p.legalRepPhone || p.legal_rep_phone || p.rep_phone || "",
+
+    // Contact Person
     contactPersonName: p.contactPersonName || p.contact_person_name || p.contact_name || "",
     contactPersonPosition: p.contactPersonPosition || p.contact_person_position || p.contact_position || "",
     contactPersonEmail: p.contactPersonEmail || p.contact_person_email || p.contact_person_email_address || "",
     contactPersonPhone: p.contactPersonPhone || p.contact_person_phone || "",
     contactPersonRole: p.contactPersonRole || p.contact_person_role || "",
-    staffSkills: p.staffSkills || p.staff_skills || p.skills || "",
-    experience: p.experience || p.expertise || "",
-    relevantProjects: p.relevantProjects || p.relevant_projects || p.past_projects || "",
-    description: p.description || p.background || p.profile || "",
+
+    // Expertise & Experience
+    experience: p.experience || p.organisation_experience || "",
+    staffSkills: p.staffSkills || p.staff_skills || p.key_personnel || "",
+    relevantProjects: p.relevantProjects || p.relevant_projects || p.previous_projects || "",
+
     isCoordinator: isCoord,
-    role: isCoord ? "Coordinator" : (p.role || "Partner")
+    role: isCoord ? "Coordinator" : (p.role || "Partner"),
+    description: p.description || p.background || p.profile || "",
   };
 }
 
@@ -859,11 +872,13 @@ function createDetailedPartnerProfile(rawPartner: Partner): Table {
     { label: "Postcode", value: partner.postcode },
     { label: "City", value: partner.city },
     { label: "Legal Address", value: partner.legalAddress },
+    { label: "Public Body?", value: partner.isPublicBody ? "Yes" : "No" },
+    { label: "Non-Profit?", value: partner.isNonProfit ? "Yes" : "No" },
     { label: "Website", value: partner.website },
     { label: "Contact Person", value: partner.contactPersonName },
     { label: "Contact Email", value: partner.contactPersonEmail || partner.contactEmail },
     { label: "Phone", value: partner.contactPersonPhone },
-    { label: "Role in Project", value: isCoord ? "Coordinator" : (partner.role || partner.contactPersonRole || "Partner") },
+    { label: "Role in Project", value: partner.role || (isCoord ? "Coordinator" : (partner.contactPersonRole || "Partner")) },
   ];
 
   const rows: TableRow[] = lines.map(line => {
