@@ -1682,9 +1682,17 @@ Return ONLY valid JSON, no other text.`;
             const structuredSections = ['budget', 'risks', 'workPackages', 'timeline', 'partners'];
             const isStructured = structuredSections.includes(section);
 
+            // RAG: Retrieve intelligence for edits
+            const retriever = new KnowledgeRetriever();
+            const editKeywords = KnowledgeRetriever.extractSmartKeywords(`${instruction} ${section}`);
+            const expertContext = await retriever.getRelevantKnowledge(editKeywords, 3);
+
             const editPrompt = `Current content of ${section}: ${JSON.stringify(proposal[section])}
 
 User instruction: ${instruction}
+
+### EXPERT INTELLIGENCE (Apply these quality standards to the edit):
+${expertContext || 'No specific guidelines found for this query.'}
 
 TASK: Generate the NEW content for the "${section}" section only based on the user instruction.
 
@@ -1731,7 +1739,15 @@ Return ONLY valid JSON, no other text.`;
             const ai = getAI();
             const model = ai.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
+            // RAG: Retrieve intelligence for new section
+            const retriever = new KnowledgeRetriever();
+            const sectionKeywords = KnowledgeRetriever.extractSmartKeywords(`${sectionTitle} ${proposalContext}`);
+            const expertContext = await retriever.getRelevantKnowledge(sectionKeywords, 3);
+
             const prompt = `You are generating a new section for a research/project proposal.
+
+### EXPERT INTELLIGENCE (Guidelines for this section):
+${expertContext || 'Follow general best practices for EU funding.'}
 
 SECTION TO CREATE: "${sectionTitle}"
 

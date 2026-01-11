@@ -6,6 +6,7 @@ export interface KnowledgeChunk {
     metadata: {
         type: string;
         keywords: string[];
+        source_id?: string;
     };
 }
 
@@ -18,16 +19,19 @@ export class KnowledgeRetriever {
         this.supabase = createClient(url, key);
     }
 
-    async getRelevantKnowledge(keywords: string[], limit: number = 3): Promise<string> {
+    /**
+     * Retrieves relevant intelligence chunks based on provided keywords
+     */
+    async getRelevantKnowledge(keywords: string[], limit: number = 5): Promise<string> {
         try {
             if (!keywords || keywords.length === 0) return '';
+
+            console.log(`[RAG] Searching knowledge for: ${keywords.join(', ')}`);
 
             // Clean and prepare keywords for ILIKE search
             const searchTerms = keywords.map(kw => `%${kw.toLowerCase()}%`);
 
-            // Search in content and metadata keywords
-            // Note: Since multi-word keyword search in SQL can be complex in a single call, 
-            // we'll fetch a batch and filter or use an OR condition
+            // Search in content column
             const orFilters = searchTerms.map(term => `content.ilike.${term}`).join(',');
 
             const { data, error } = await this.supabase
@@ -37,19 +41,24 @@ export class KnowledgeRetriever {
                 .limit(limit);
 
             if (error) {
-                console.error('Knowledge retrieval error:', error);
+                console.error('[RAG] Retrieval error:', error);
                 return '';
             }
 
-            if (!data || data.length === 0) return '';
+            if (!data || data.length === 0) {
+                console.log('[RAG] No relevant chunks found in library.');
+                return '';
+            }
+
+            console.log(`[RAG] Found ${data.length} relevant intelligence chunks.`);
 
             return data.map(chunk => `
---- EXPERT KNOWLEDGE FROM: ${chunk.source_name} (${chunk.metadata?.type || 'Guideline'}) ---
+--- EXPERT KNOWLEDGE: ${chunk.source_name} (${chunk.metadata?.type || 'Guideline'}) ---
 ${chunk.content}
 `).join('\n');
 
         } catch (e) {
-            console.error('Failed to retrieve knowledge:', e);
+            console.error('[RAG] Failed to retrieve knowledge:', e);
             return '';
         }
     }
@@ -60,33 +69,41 @@ ${chunk.content}
     static extractSmartKeywords(text: string): string[] {
         if (!text) return [];
 
-        // Focus on EU program actions and topics
-        const patterns = [
-            /KA\d{3}(-ADU|-VET|-YOU|-HED)?/gi, // Erasmus+ codes
-            /Erasmus\+/gi,
-            /Horizon Europe/gi,
-            /Creative Europe/gi,
-            /Adult Education/gi,
-            /Vocational Education/gi,
-            /High Density/gi,
-            /Inclusion/gi,
-            /Digital/gi,
-            /Sustainable/gi,
-            /Innovation/gi,
-            /Mobility/gi
+        const keywords = new Set<string>();
+
+        // 1. Funding Program Patterns
+        const programs = [
+            /Erasmus\+?/gi,
+            /Horizon\s*Europe/gi,
+            /Creative\s*Europe/gi,
+            /Digital\s*Europe/gi,
+            /Interreg/gi,
+            /Aurora/gi, // Added specifically as user has Aurora docs
+            /LIFE\s*Programme/gi,
+            /KA\d{3}(-ADU|-VET|-YOU|-HED)?/gi
         ];
 
-        const keywords = new Set<string>();
-        patterns.forEach(p => {
-            const matches = text.match(p);
-            if (matches) matches.forEach(m => keywords.add(m));
+        programs.forEach(regex => {
+            const matches = text.match(regex);
+            if (matches) matches.forEach(m => keywords.add(m.trim()));
         });
 
-        // Add some generic high-value words
-        const highValue = ['Impact', 'Relevance', 'Needs analysis', 'Priority', 'Outcome'];
-        highValue.forEach(v => {
-            if (text.toLowerCase().includes(v.toLowerCase())) keywords.add(v);
+        // 2. Transversal Priorities
+        const priorities = [
+            'Inclusion', 'Digital', 'Green', 'Sustainable', 'Circular Economy',
+            'SME', 'Innovation', 'Skills', 'Capacity Building', 'Impact',
+            'Cross-border', 'Integration', 'Diversity', 'VET', 'Adult Education'
+        ];
+
+        priorities.forEach(p => {
+            if (text.toLowerCase().includes(p.toLowerCase())) keywords.add(p);
         });
+
+        // 3. Extract technical-looking capitalized words (min 5 chars)
+        const techTerms = text.match(/[A-Z][a-z]{4,}/g);
+        if (techTerms) {
+            techTerms.slice(0, 5).forEach(term => keywords.add(term));
+        }
 
         return Array.from(keywords);
     }
