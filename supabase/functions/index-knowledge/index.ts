@@ -36,16 +36,20 @@ serve(async (req) => {
 
     // Initialize Gemini
     const genAI = new GoogleGenerativeAI(Deno.env.get('GEMINI_API_KEY') ?? '')
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
-    const prompt = `You are an EU Funding Expert. Analyze the provided guidelines for "${sourceName}".
-        Extract a comprehensive list of:
-        1. QUALIFYING CRITERIA: What must a project have to be eligible?
-        2. EXPECTED OUTPUTS: What results does the EU want to see?
-        3. BEST PRACTICES: How should the proposal be written? What tone and keywords are rewarded?
-        4. EVALUATION TIPS: What are the secret markers used by scorers?
+    const prompt = `You are a Senior EU Funding Strategist. Analyze the provided guidelines for "${sourceName}".
+        
+        EXTRACT AT LEAST 15-20 HIGH-DENSITY KNOWLEDGE CHUNKS.
+        
+        For each chunk, focus on:
+        1. QUALIFYING CRITERIA: Exact technical requirements for eligibility.
+        2. EXPECTED OUTPUTS: Performance indicators and results the EU rewards.
+        3. BEST PRACTICES: Strategic advice on tone, methodology, and consortium structure.
+        4. EVALUATION TIPS: Key phrases and markers used by expert scorers.
 
-        Return the results as a list of independent knowledge "chunks". Each chunk should be about 2-3 paragraphs and include the source name.
+        Each chunk must be self-contained and technical. 
+        Include EXTREMELY SPECIFIC keywords for better search retrieval.
         Return ONLY valid JSON:
         {
           "chunks": [

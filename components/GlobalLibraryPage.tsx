@@ -47,18 +47,51 @@ export function GlobalLibraryPage() {
     };
 
     const handleSync = async () => {
-        // In a real app, this would scan the local folder or a storage bucket
-        // Since we are in a demo/agent context, we'll suggest uploading files to the 'global-library' bucket
         setIsSyncing(true);
-        toast.info('Initiating library synchronization...');
+        toast.info('Scanning storage for new guidelines...');
 
         try {
-            // Trigger indexing for common files
-            // For now, we'll just refresh the list
+            // 1. List files in the bucket
+            const { data: files, error: listError } = await supabase.storage.from('global-library').list();
+            if (listError) throw listError;
+
+            if (!files || files.length === 0) {
+                toast.error('No PDF files found in the "global-library" bucket.');
+                return;
+            }
+
+            toast.info(`Found ${files.length} files. Starting deep analysis with Gemini 2.0...`);
+
+            // 2. Index each file
+            let totalChunks = 0;
+            for (const file of files) {
+                if (file.name === '.emptyFolderPlaceholder') continue;
+
+                toast.loading(`Analyzing ${file.name}...`, { id: 'sync-progress' });
+
+                const response = await fetch(`${functionsUrl}/index-knowledge`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${publicAnonKey}`
+                    },
+                    body: JSON.stringify({
+                        fileUrl: file.name,
+                        sourceName: file.name.replace('.pdf', '')
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    totalChunks += result.count;
+                }
+            }
+
+            toast.success(`Sync complete! Extracted ${totalChunks} intelligence chunks.`, { id: 'sync-progress' });
             await loadKnowledge();
-            toast.success('Library synced with database');
-        } catch (error) {
-            toast.error('Sync failed');
+        } catch (error: any) {
+            console.error('Sync failed:', error);
+            toast.error(`Sync failed: ${error.message}`);
         } finally {
             setIsSyncing(false);
         }
@@ -139,7 +172,7 @@ export function GlobalLibraryPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">High</div>
-                        <p className="text-xs text-muted-foreground mt-1">Using Gemini 1.5 Pro for deep document analysis.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Using Gemini 2.0 Flash for deep document analysis.</p>
                     </CardContent>
                 </Card>
             </div>
