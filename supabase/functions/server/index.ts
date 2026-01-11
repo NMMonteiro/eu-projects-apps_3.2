@@ -1070,8 +1070,8 @@ Return ONLY valid JSON, no other text.`;
                 name: body.name,
                 legal_name_national: body.legalNameNational,
                 acronym: body.acronym,
-                organisation_id: body.organisationId,
-                pic: body.pic,
+                organisation_id: body.organisationId || body.pic, // Use either
+                pic: body.pic || body.organisationId,
                 vat_number: body.vatNumber,
                 business_id: body.businessId,
                 organization_type: body.organizationType,
@@ -1086,9 +1086,9 @@ Return ONLY valid JSON, no other text.`;
                 website: body.website,
                 description: body.description,
                 department: body.department,
-                keywords: body.keywords,
-                logo_url: body.logoUrl,
-                pdf_url: body.pdfUrl,
+                keywords: Array.isArray(body.keywords) ? body.keywords : [],
+                logo_url: body.logoUrl || null,
+                pdf_url: body.pdfUrl || null,
                 legal_rep_name: body.legalRepName,
                 legal_rep_position: body.legalRepPosition,
                 legal_rep_email: body.legalRepEmail,
@@ -1103,13 +1103,18 @@ Return ONLY valid JSON, no other text.`;
                 relevant_projects: body.relevantProjects
             };
 
+            console.log('Inserting partner:', JSON.stringify(dbPartner).substring(0, 500));
+
             const { data, error } = await supabase
                 .from('partners')
                 .insert(dbPartner)
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('Partner Insert Error:', error);
+                throw error;
+            }
 
             return new Response(
                 JSON.stringify({ ...body, id: data.id, createdAt: data.created_at }),
@@ -1128,8 +1133,8 @@ Return ONLY valid JSON, no other text.`;
                 name: body.name,
                 legal_name_national: body.legalNameNational,
                 acronym: body.acronym,
-                organisation_id: body.organisationId,
-                pic: body.pic,
+                organisation_id: body.organisationId || body.pic,
+                pic: body.pic || body.organisationId,
                 vat_number: body.vatNumber,
                 business_id: body.businessId,
                 organization_type: body.organizationType,
@@ -1144,9 +1149,9 @@ Return ONLY valid JSON, no other text.`;
                 website: body.website,
                 description: body.description,
                 department: body.department,
-                keywords: body.keywords,
-                logo_url: body.logoUrl,
-                pdf_url: body.pdfUrl,
+                keywords: Array.isArray(body.keywords) ? body.keywords : [],
+                logo_url: body.logoUrl || null,
+                pdf_url: body.pdfUrl || null,
                 legal_rep_name: body.legalRepName,
                 legal_rep_position: body.legalRepPosition,
                 legal_rep_email: body.legalRepEmail,
@@ -1158,8 +1163,11 @@ Return ONLY valid JSON, no other text.`;
                 contact_person_role: body.contactPersonRole,
                 experience: body.experience,
                 staff_skills: body.staffSkills,
-                relevant_projects: body.relevantProjects
+                relevant_projects: body.relevantProjects,
+                updated_at: new Date().toISOString()
             };
+
+            console.log(`Updating partner ${id}:`, JSON.stringify(dbPartner).substring(0, 500));
 
             const { error } = await supabase
                 .from('partners')
@@ -1167,8 +1175,7 @@ Return ONLY valid JSON, no other text.`;
                 .eq('id', id);
 
             if (error) {
-                // Check if it was in KV and needs to be migrated?
-                // For now just error if DB update fails and it's not a UUID
+                console.error(`Partner Update Error for ${id}:`, error);
                 throw error;
             }
 

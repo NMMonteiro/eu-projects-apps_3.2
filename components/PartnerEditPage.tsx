@@ -134,8 +134,11 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                 body: JSON.stringify(partner),
             });
 
+            const data = await response.json();
+
             if (!response.ok) {
-                throw new Error('Failed to save partner');
+                console.error('Save failed:', data);
+                throw new Error(data.error || data.details || 'Failed to save partner');
             }
 
             toast.success(isNew ? 'Partner created!' : 'Partner updated!');
@@ -467,7 +470,12 @@ export function PartnerEditPage({ partnerId, onBack }: PartnerEditPageProps) {
                         <Label>Keywords (comma-separated)</Label>
                         <Input
                             value={partner.keywords?.join(', ') || ''}
-                            onChange={(e) => updateField('keywords', e.target.value.split(',').map(k => k.trim()))}
+                            onChange={(e) => {
+                                const keywords = e.target.value.split(',')
+                                    .map(k => k.trim())
+                                    .filter(k => k !== '');
+                                updateField('keywords', keywords);
+                            }}
                             placeholder="AI, sustainability, innovation"
                         />
                     </div>
