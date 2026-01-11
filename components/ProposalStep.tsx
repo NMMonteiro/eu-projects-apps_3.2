@@ -240,15 +240,18 @@ export function ProposalStep({
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {proposal.dynamic_sections ? (
-                        Object.entries(proposal.dynamic_sections).map(([key, content]) => (
-                            <div key={key} className="border-b border-white/5 pb-4 last:border-0 last:pb-0">
-                                <h4 className="font-medium mb-2 capitalize">{key.replace(/_/g, ' ')}</h4>
-                                <div
-                                    className="text-sm text-muted-foreground prose prose-invert max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: (content as string).substring(0, 300) + '...' }}
-                                />
-                            </div>
-                        ))
+                        Object.entries(proposal.dynamic_sections).map(([key, content]) => {
+                            const strContent = typeof content === 'string' ? content : '';
+                            return (
+                                <div key={key} className="border-b border-white/5 pb-4 last:border-0 last:pb-0">
+                                    <h4 className="font-medium mb-2 capitalize">{key.replace(/_/g, ' ')}</h4>
+                                    <div
+                                        className="text-sm text-muted-foreground prose prose-invert max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: strContent.substring(0, 300) + (strContent.length > 300 ? '...' : '') }}
+                                    />
+                                </div>
+                            );
+                        })
                     ) : (
                         <>
                             {proposal.relevance && (
@@ -256,7 +259,7 @@ export function ProposalStep({
                                     <h4 className="font-medium mb-2">Relevance</h4>
                                     <div
                                         className="text-sm text-muted-foreground prose prose-invert max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: proposal.relevance.substring(0, 300) + '...' }}
+                                        dangerouslySetInnerHTML={{ __html: (proposal.relevance || '').substring(0, 300) + (proposal.relevance.length > 300 ? '...' : '') }}
                                     />
                                 </div>
                             )}
@@ -265,7 +268,7 @@ export function ProposalStep({
                                     <h4 className="font-medium mb-2">Impact</h4>
                                     <div
                                         className="text-sm text-muted-foreground prose prose-invert max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: proposal.impact.substring(0, 300) + '...' }}
+                                        dangerouslySetInnerHTML={{ __html: (proposal.impact || '').substring(0, 300) + (proposal.impact.length > 300 ? '...' : '') }}
                                     />
                                 </div>
                             )}
@@ -274,7 +277,7 @@ export function ProposalStep({
                                     <h4 className="font-medium mb-2">Methodology</h4>
                                     <div
                                         className="text-sm text-muted-foreground prose prose-invert max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: proposal.methods.substring(0, 300) + '...' }}
+                                        dangerouslySetInnerHTML={{ __html: (proposal.methods || '').substring(0, 300) + (proposal.methods.length > 300 ? '...' : '') }}
                                     />
                                 </div>
                             )}
@@ -283,7 +286,7 @@ export function ProposalStep({
                                     <h4 className="font-medium mb-2">Dissemination</h4>
                                     <div
                                         className="text-sm text-muted-foreground prose prose-invert max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: proposal.dissemination.substring(0, 300) + '...' }}
+                                        dangerouslySetInnerHTML={{ __html: (proposal.dissemination || '').substring(0, 300) + (proposal.dissemination.length > 300 ? '...' : '') }}
                                     />
                                 </div>
                             )}

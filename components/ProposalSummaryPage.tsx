@@ -184,7 +184,7 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                                 <Clock className="w-3 h-3" /> Project ID
                             </span>
-                            <p className="text-sm font-semibold text-slate-800 font-mono">#{proposal.id?.substring(0, 8).toUpperCase()}</p>
+                            <p className="text-sm font-semibold text-slate-800 font-mono">#{proposal.id ? proposal.id.substring(0, 8).toUpperCase() : 'NEW'}</p>
                         </div>
                     </div>
                 </div>
