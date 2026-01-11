@@ -197,10 +197,38 @@ function cleanHtml(html: string | undefined | null): string {
 /**
  * Creates a paragraph with bolding for "Key: Value" patterns.
  */
-function createSmartParagraph(text: string, options: { bullet?: number } = {}): Paragraph {
+function createSmartParagraph(text: string, options: { bullet?: number, allowedNames?: string[] } = {}): Paragraph | null {
   const line = formatContentText(text.trim());
-  const colonIndex = line.indexOf(':');
 
+  // GLOBAL FILTER: If allowedNames is provided, check if the whole line is about a forbidden partner
+  if (options.allowedNames && options.allowedNames.length > 0) {
+    const lowerLine = line.toLowerCase();
+
+    // We only filter if the line strictly contains a partner identification pattern but no allowed name
+    // Example: "ASCOM Pavia (Associazione...)"
+    const partnerIdPattern = /^[A-Z][A-Za-z\s]{3,}.*?\(/;
+    if (partnerIdPattern.test(line)) {
+      const isAllowed = options.allowedNames.some(name => lowerLine.includes(name));
+      if (!isAllowed) {
+        console.log(`Global Filter: Skipping line about forbidden partner: ${line.substring(0, 50)}...`);
+        return null;
+      }
+    }
+
+    // Also catch lines starting with a colon (Property: Value) where the property is a partner name
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0 && colonIndex < 40) {
+      const key = line.substring(0, colonIndex).toLowerCase();
+      // If it looks like a partner name but isn't allowed
+      const looksLikePartner = key.length > 4 && !key.includes(' ') && !['description', 'background', 'context', 'objective'].includes(key);
+      if (looksLikePartner) {
+        const isAllowed = options.allowedNames.some(name => key.includes(name) || name.includes(key));
+        if (!isAllowed) return null;
+      }
+    }
+  }
+
+  const colonIndex = line.indexOf(':');
   // Only bold if colon is not at start/end and seems like a label (limit length)
   if (colonIndex > 0 && colonIndex < 70 && colonIndex < line.length - 1) {
     const key = line.substring(0, colonIndex + 1);
@@ -436,10 +464,10 @@ function convertHtmlToParagraphs(html: string | undefined | null, sectionTitle?:
   // 6. Default: List of paragraphs with bold labels
   return lines.map(line => {
     if (line.startsWith("• ")) {
-      return createSmartParagraph(line.substring(2), { bullet: 0 });
+      return createSmartParagraph(line.substring(2), { bullet: 0, allowedNames });
     }
-    return createSmartParagraph(line);
-  });
+    return createSmartParagraph(line, { allowedNames });
+  }).filter((p): p is Paragraph => p !== null);
 }
 
 function createSectionHeader(text: string, level: number = 1): Paragraph {
