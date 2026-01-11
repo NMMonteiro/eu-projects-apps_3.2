@@ -157,9 +157,18 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    // 3. Merge Dynamic content
-    Object.entries(dynamicSections).forEach(([key, val]) => {
-        if (!val || typeof val !== 'string' || val.length < 10) return;
+    // 3. Merge Dynamic content & Legacy Fields
+    const allContentSource: Record<string, any> = { ...dynamicSections };
+    // Add legacy fields if they have content
+    const legacyFields = ['introduction', 'relevance', 'methods', 'impact', 'objectives', 'methodology', 'expectedResults', 'innovation', 'sustainability', 'consortium', 'workPlan', 'riskManagement', 'dissemination'];
+    legacyFields.forEach(f => {
+        if ((proposal as any)[f] && (proposal as any)[f].length > 10) {
+            allContentSource[f] = (proposal as any)[f];
+        }
+    });
+
+    Object.entries(allContentSource).forEach(([key, val]) => {
+        if (!val || typeof val !== 'string' || val.length < 5) return;
         const nk = normalize(key);
         if (['summary', 'budget', 'partners', 'risks'].some(x => nk.includes(x))) return;
 
@@ -168,7 +177,11 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
         if (!target) {
             for (const [pK, pV] of sectionPool.entries()) {
-                if (normalize(pK).includes(nk) || nk.includes(normalize(pK)) || normalize(pV.title).includes(nk)) { target = pK; break; }
+                const pn = normalize(pV.title);
+                if (normalize(pK).includes(nk) || nk.includes(normalize(pK)) || pn.includes(nk) || nk.includes(pn)) {
+                    target = pK;
+                    break;
+                }
             }
         }
 
@@ -184,6 +197,22 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
             });
         }
     });
+
+    // 3.5 Fallback for organization/background sections from partner data
+    const coord = (proposal.partners || []).find(p => p.isCoordinator || (p as any).is_coordinator);
+    if (coord) {
+        for (const [pk, s] of sectionPool.entries()) {
+            const nl = normalize(s.title);
+            const isBackground = nl === 'background' || nl === 'organisationalbackground' || nl.includes('backgroundandexperience');
+            if (isBackground && (!s.content || s.content.length < 50)) {
+                const bgContent = [coord.description, coord.experience].filter(Boolean).join("\n\n");
+                if (bgContent.length > 50) {
+                    s.content = bgContent;
+                    console.log(`Populated ${s.title} from Coordinator data`);
+                }
+            }
+        }
+    }
 
     // 4. Final DB Sync (The Hammer of Cleanliness)
     workPackages.forEach((wp: any, idx: number) => {
@@ -239,9 +268,13 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
 
     return items.filter(s => {
         const type = s.type || '';
+        // Always show structured data sections
         if (['wp_list', 'partners', 'budget', 'risk', 'work_package', 'partner_profiles'].includes(type)) return true;
 
-        // Populate if there's ANY content
-        return !!(s.content && s.content.trim().length > 0);
+        // Show all level 1 sections (headers) even if empty
+        if (s.level === 1) return true;
+
+        // For others, only show if they have real content
+        return !!(s.content && s.content.trim().length > 10);
     });
 }
