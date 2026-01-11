@@ -35,11 +35,10 @@
 
 ---
 
-## Current Fixes in Progress
-
 - [x] **Database Linkage**: Implemented `saveToSupabase` sync logic to mirror proposal data from KV to the relational `proposals` table.
 - [x] **UUID Safety**: Fixed hydration and search logic to safely handle both UUIDs and string IDs, preventing Postgres type errors.
-- [ ] **Deployment Verification**: Ongoing deployment of updated edge functions to production.
+- [x] **AI Edit for Activities**: Enabled structured AI editing for Work Package activities. Fixed section detection aliases ("activities", "tasks") and updated frontend state management for virtual sections.
+- [x] **Deployment Verification**: Deployed updated `server` edge function and Vercel frontend.
 
 ---
 
