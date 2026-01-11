@@ -142,6 +142,7 @@ function normalizePartner(p: any): Partner {
     isCoordinator: isCoord,
     role: isCoord ? "Coordinator" : (p.role || "Partner"),
     description: p.description || p.background || p.profile || "",
+    roleLabel: isCoord ? "Applicant" : "Partner",
   };
 }
 
@@ -603,11 +604,19 @@ export async function generateDocx(proposal: FullProposal): Promise<{ blob: Blob
       if (isPartners && p.partners?.length > 0) {
         docChildren.push(createPartnerListTable(p.partners.map(normalizePartner)));
       } else if (isProfiles && p.partners?.length > 0) {
-        p.partners.forEach((pt, i) => {
+        // Sort: Coordinator first
+        const sorted = [...p.partners].sort((a, b) => {
+          const na = normalizePartner(a);
+          const nb = normalizePartner(b);
+          return (na.isCoordinator ? -1 : nb.isCoordinator ? 1 : 0);
+        });
+
+        sorted.forEach((pt) => {
           const partner = normalizePartner(pt);
-          docChildren.push(createSectionHeader(`${i + 1}. ${partner.name}`, 3));
+          const label = partner.isCoordinator ? "Applicant" : "Partner";
+          docChildren.push(createSectionHeader(`${label}: ${partner.name}`, 3));
           docChildren.push(createDetailedPartnerProfile(partner));
-          docChildren.push(new Paragraph({ text: "" }));
+          docChildren.push(new Paragraph({ text: "", spacing: { after: 200 } }));
         });
       } else if (isWPList && p.workPackages?.length > 0) {
         // Master Table
