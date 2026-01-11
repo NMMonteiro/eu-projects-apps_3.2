@@ -241,29 +241,7 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         const type = s.type || '';
         if (['wp_list', 'partners', 'budget', 'risk', 'work_package', 'partner_profiles'].includes(type)) return true;
 
-        // Content-based filtering
-        const hasRealContent = s.content && s.content.length > 15 &&
-            !s.content.toLowerCase().includes('details to be provided') &&
-            !s.content.toLowerCase().includes('placeholder for') &&
-            !s.content.toLowerCase().includes('to be inserted');
-
-        if (hasRealContent) {
-            // Redundancy Check: If we have structured partner profiles, skip top-level "Background" 
-            const nl = normalize(s.title);
-            if (nl === 'background' || nl === 'organisationalbackground') {
-                if (proposal.partners?.length > 0) return false;
-            }
-            return true;
-        }
-
-        // Keep parent headers ONLY if they have children with content
-        if (s.level === 1) {
-            return items.some(child =>
-                child.id.startsWith(s.id) &&
-                child.id !== s.id &&
-                (child.type || (child.content && child.content.length > 15))
-            );
-        }
-        return false;
+        // Populate if there's ANY content
+        return !!(s.content && s.content.trim().length > 0);
     });
 }

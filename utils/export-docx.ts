@@ -204,20 +204,12 @@ function createSmartParagraph(text: string, options: { bullet?: number, allowedN
   if (options.allowedNames && options.allowedNames.length > 0) {
     const lowerLine = line.toLowerCase();
 
-    // Pattern 1: Paragraph starts with a likely partner name but it's not in our allowed list
-    // e.g., "ASCOM Pavia is...", "Learnmera Oy (OID...)"
-    const partnerStarts = line.match(/^([A-Z][A-Za-z0-9\s]{2,25})(?:\s|:|\()/);
-    if (partnerStarts) {
-      const name = partnerStarts[1].trim().toLowerCase();
-      // Filter out words that start sentences but aren't partner names
-      if (name.length > 3 && !['project', 'objective', 'summary', 'context', 'it', 'this', 'we', 'the'].includes(name)) {
-        const isAllowed = options.allowedNames.some(an => an.includes(name) || name.includes(an));
-
-        // If this line is clearly about a specific entity that is NOT allowed, kill it.
-        if (!isAllowed) {
-          console.log(`Global Filter: Stripping mention of forbidden entity "${name}"`);
-          return null;
-        }
+    // Specifically target ASCOM mentions which have been a recurring issue
+    if (lowerLine.includes('ascom') && !options.allowedNames.some(name => name.includes('ascom'))) {
+      // If the paragraph is JUST about ASCOM (starts with it), we skip it to be safe
+      if (lowerLine.startsWith('ascom')) {
+        console.log(`Global Filter: Stripping paragraph about removed partner ASCOM`);
+        return null;
       }
     }
   }
