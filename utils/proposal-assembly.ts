@@ -21,7 +21,8 @@ const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
  */
 function extractWPIndex(text: string): number | undefined {
     if (!text) return undefined;
-    const match = text.match(/\b(?:Work\s*Packages?|WP|WP_)\s*(?:n°|no\.?|#|number)?\s*(\d+)\b/i);
+    // Enhanced regex to handle underscores: "work_package_2", "WP_2", etc.
+    const match = text.match(/\b(?:Work[\s_]*Packages?|WP[_\s]*|WorkPlan)\s*(?:n°|no\.?|#|number)?\s*(\d+)\b/i);
     if (match) return parseInt(match[1]) - 1;
     return undefined;
 }
@@ -46,6 +47,11 @@ function cleanTitle(title: string): string {
         safety++;
     }
 
+    if (!t && title) {
+        // If stripping the prefix leaves nothing (e.g. title was just "WP1"), 
+        // return the cleaned original title instead of an empty string
+        return title.replace(/_/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\w/, (c) => c.toUpperCase());
+    }
     return t ? t.replace(/^\w/, (c) => c.toUpperCase()) : '';
 }
 
