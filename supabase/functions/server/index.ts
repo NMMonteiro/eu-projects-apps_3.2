@@ -971,7 +971,7 @@ Return ONLY valid JSON, no other text.`;
             kvPartners.forEach(kvp => {
                 const alreadyExists = allPartners.find(p =>
                     p.id === kvp.id ||
-                    p.name.toLowerCase() === kvp.name.toLowerCase()
+                    (p.name && kvp.name && p.name.toLowerCase() === kvp.name.toLowerCase())
                 );
                 if (!alreadyExists) {
                     allPartners.push(kvp);
