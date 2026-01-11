@@ -961,6 +961,7 @@ Return ONLY valid JSON, no other text.`;
                 staffSkills: p.staff_skills,
                 relevantProjects: p.relevant_projects,
                 keywords: p.keywords,
+                pdfUrl: p.pdf_url,
                 createdAt: p.created_at
             }));
 
@@ -979,9 +980,10 @@ Return ONLY valid JSON, no other text.`;
             );
         }
 
-        // GET /partners/:id - Get single
-        if (path.match(/\/partners\/[^\/]+$/) && req.method === 'GET') {
-            const id = path.split('/').pop() || '';
+        // GET /partners/:id - Get single partner details
+        if (path.match(/\/partners\/[^\/]+$/) && req.method === 'GET' && !path.endsWith('/partners')) {
+            const match = path.match(/\/partners\/([^\/]+)$/);
+            const id = match ? match[1] : path.split('/').pop() || '';
             console.log(`[PARTNER] Fetching single partner: ${id}`);
 
             const supabase = getSupabaseClient();
@@ -1126,7 +1128,8 @@ Return ONLY valid JSON, no other text.`;
 
         // PUT /partners/:id - Update
         if (path.match(/\/partners\/[^\/]+$/) && req.method === 'PUT') {
-            const id = path.split('/').pop();
+            const match = path.match(/\/partners\/([^\/]+)$/);
+            const id = match ? match[1] : path.split('/').pop();
             const body = await req.json();
             const supabase = getSupabaseClient();
 
@@ -1215,7 +1218,8 @@ Return ONLY valid JSON, no other text.`;
 
         // DELETE /partners/:id
         if (path.match(/\/partners\/[^\/]+$/) && req.method === 'DELETE') {
-            const id = path.split('/').pop();
+            const match = path.match(/\/partners\/([^\/]+)$/);
+            const id = match ? match[1] : path.split('/').pop();
             const supabase = getSupabaseClient();
 
             if (isUUID(id)) {
@@ -1231,7 +1235,8 @@ Return ONLY valid JSON, no other text.`;
 
         // POST /partners/:id/upload-logo
         if (path.match(/\/partners\/[^\/]+\/upload-logo$/) && req.method === 'POST') {
-            const id = path.split('/')[2];
+            const match = path.match(/\/partners\/([^\/]+)\/upload-logo$/);
+            const id = match ? match[1] : path.split('/')[2]; // Fallback to old behavior if regex fails
             const formData = await req.formData();
             const file = formData.get('file');
 
@@ -1288,7 +1293,8 @@ Return ONLY valid JSON, no other text.`;
 
         // POST /partners/:id/upload-pdf
         if (path.match(/\/partners\/[^\/]+\/upload-pdf$/) && req.method === 'POST') {
-            const id = path.split('/')[2];
+            const match = path.match(/\/partners\/([^\/]+)\/upload-pdf$/);
+            const id = match ? match[1] : path.split('/')[2]; // Fallback to old behavior if regex fails
             const formData = await req.formData();
             const file = formData.get('file');
 

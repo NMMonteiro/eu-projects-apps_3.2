@@ -312,11 +312,17 @@ export const DynamicPartnerSection = ({ partners }: { partners: Partner[] }) => 
                 <Card key={i} className="bg-card/50 border-border/60">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-lg text-primary flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Building2 className="h-5 w-5 opacity-70" />
-                                {p.name}
+                            <div className="flex items-center gap-3">
+                                {p.logoUrl ? (
+                                    <div className="w-10 h-10 bg-white rounded-lg border border-border/40 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                                        <img src={p.logoUrl} alt={p.name} className="w-full h-full object-contain" />
+                                    </div>
+                                ) : (
+                                    <Building2 className="h-5 w-5 opacity-70" />
+                                )}
+                                <span className="truncate">{p.name}</span>
                             </div>
-                            {p.isCoordinator && <Badge className="bg-primary/20 text-primary border-primary/30">Coordinator</Badge>}
+                            {p.isCoordinator && <Badge className="bg-primary/20 text-primary border-primary/30 shrink-0">Coordinator</Badge>}
                         </CardTitle>
                         {p.country && (
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

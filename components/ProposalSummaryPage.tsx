@@ -234,14 +234,27 @@ export const ProposalSummaryPage: React.FC<ProposalSummaryPageProps> = ({ propos
                                                     <tbody className="divide-y divide-slate-100">
                                                         {proposal.partners?.map((p, pIdx) => (
                                                             <tr key={pIdx}>
-                                                                <td className="py-3 px-4">
+                                                                <td className="py-2 px-4 text-center">
                                                                     <span className={p.isCoordinator ? "bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] font-bold" : "text-slate-400"}>
                                                                         {p.isCoordinator ? 'Coordinator' : 'Partner'}
                                                                     </span>
                                                                 </td>
-                                                                <td className="py-3 px-4 font-semibold text-slate-800">{p.name}</td>
-                                                                <td className="py-3 px-4 text-slate-600">{p.country}</td>
-                                                                <td className="py-3 px-4 text-slate-400 italic">{p.organizationType || 'SME'}</td>
+                                                                <td className="py-2 px-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        {p.logoUrl ? (
+                                                                            <div className="w-8 h-8 bg-white rounded border border-slate-200 flex items-center justify-center p-0.5 overflow-hidden shrink-0">
+                                                                                <img src={p.logoUrl} alt="" className="w-full h-full object-contain" />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="w-8 h-8 bg-slate-50 rounded border border-slate-100 flex items-center justify-center shrink-0">
+                                                                                <Building2 className="w-4 h-4 text-slate-300" />
+                                                                            </div>
+                                                                        )}
+                                                                        <span className="font-semibold text-slate-800">{p.name}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="py-2 px-4 text-slate-600">{p.country}</td>
+                                                                <td className="py-2 px-4 text-slate-400 italic">{p.organizationType || 'SME'}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

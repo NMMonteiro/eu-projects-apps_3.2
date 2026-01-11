@@ -982,14 +982,27 @@ export function ProposalViewerPage({ proposalId, onBack }: ProposalViewerPagePro
                                                                 <tbody className="divide-y divide-border/10">
                                                                     {proposal.partners?.map((p, pIdx) => (
                                                                         <tr key={pIdx}>
-                                                                            <td className="py-3 px-4">
+                                                                            <td className="py-2 px-4 text-center">
                                                                                 <span className={p.isCoordinator ? "bg-primary/20 text-primary px-2 py-0.5 rounded text-[10px] font-bold" : "text-muted-foreground"}>
                                                                                     {p.isCoordinator ? 'Coordinator' : 'Partner'}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="py-3 px-4 font-semibold text-foreground/80">{p.name}</td>
-                                                                            <td className="py-3 px-4 text-muted-foreground">{p.country}</td>
-                                                                            <td className="py-3 px-4 text-muted-foreground/60 italic">{p.organizationType || 'SME'}</td>
+                                                                            <td className="py-2 px-4">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    {p.logoUrl ? (
+                                                                                        <div className="w-8 h-8 bg-white rounded border border-border/40 flex items-center justify-center p-0.5 overflow-hidden shrink-0">
+                                                                                            <img src={p.logoUrl} alt="" className="w-full h-full object-contain" />
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <div className="w-8 h-8 bg-secondary/20 rounded border border-border/20 flex items-center justify-center shrink-0">
+                                                                                            <Building2 className="w-4 h-4 text-muted-foreground/30" />
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <span className="font-semibold text-foreground/80">{p.name}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="py-2 px-4 text-muted-foreground">{p.country}</td>
+                                                                            <td className="py-2 px-4 text-muted-foreground/60 italic">{p.organizationType || 'SME'}</td>
                                                                         </tr>
                                                                     ))}
                                                                 </tbody>
