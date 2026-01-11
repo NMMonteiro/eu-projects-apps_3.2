@@ -10,7 +10,8 @@ import {
     ChevronDown,
     ChevronRight,
     Folder,
-    Sparkles
+    Sparkles,
+    Book
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
@@ -52,6 +53,7 @@ export function Layout() {
             title: 'Configuration',
             items: [
                 { href: '/admin/funding-schemes', label: 'Funding Schemes', icon: Sparkles },
+                { href: '/admin/global-library', label: 'Global Library', icon: Book },
                 { href: '/settings', label: 'Settings', icon: Settings },
             ]
         }

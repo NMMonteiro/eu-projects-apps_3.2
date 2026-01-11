@@ -7,6 +7,7 @@ import { GoogleAIFileManager } from 'npm:@google/generative-ai/server';
 import { Buffer } from 'node:buffer';
 import * as KV from './kv_store.ts';
 import * as PromptBuilder from './prompt_builder.ts';
+import { KnowledgeRetriever } from './knowledge_retriever.ts';
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -590,6 +591,19 @@ Return ONLY valid JSON, no other text.`;
                 ]
             });
 
+            // NEW: Expert Intelligence Retrieval (RAG)
+            console.log('🧠 Retrieving expert intelligence for RAG...');
+            const retriever = new KnowledgeRetriever();
+            const smartKeywords = KnowledgeRetriever.extractSmartKeywords(
+                `${fundingScheme?.name || ''} ${idea.title} ${idea.description} ${userPrompt || ''}`
+            );
+
+            const expertKnowledge = await retriever.getRelevantKnowledge(smartKeywords, 5);
+
+            if (expertKnowledge) {
+                console.log(`✅ Found ${smartKeywords.length} relevant keywords and retrieved expert context.`);
+            }
+
             const prompt = PromptBuilder.buildProposalPrompt(
                 idea,
                 summary,
@@ -599,10 +613,15 @@ Return ONLY valid JSON, no other text.`;
                 fundingScheme
             );
 
-            console.log(`🚀 Generating proposal with Gemini 2.0 Flash. Prompt length: ${prompt.length} chars`);
+            // Append Expert Knowledge to the prompt
+            const fullyInformedPrompt = expertKnowledge
+                ? `${prompt}\n\n### EXPERT INTELLIGENCE (MANDATORY GUIDELINES TO FOLLOW):\n${expertKnowledge}`
+                : prompt;
+
+            console.log(`🚀 Generating proposal with Gemini 2.0 Flash. Prompt length: ${fullyInformedPrompt.length} chars`);
 
             const startTime = Date.now();
-            const result = await model.generateContent(prompt).catch(e => {
+            const result = await model.generateContent(fullyInformedPrompt).catch(e => {
                 console.error('AI generation call failed:', e);
                 throw new Error(`AI generation failed: ${e.message}`);
             });

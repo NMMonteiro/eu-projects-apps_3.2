@@ -12,6 +12,7 @@ import { ProposalViewerPage } from './components/ProposalViewerPage';
 import { ProposalSummaryPage } from './components/ProposalSummaryPage';
 import { PartnerEditPage } from './components/PartnerEditPage';
 import { FundingSchemeAdminPage } from './components/FundingSchemeAdminPage';
+import { GlobalLibraryPage } from './components/GlobalLibraryPage';
 import { TestExportPage } from './components/TestExportPage';
 
 // Wrapper components to handle navigation props
@@ -64,6 +65,7 @@ function App() {
                     <Route path="/proposals/:id/summary" element={<ProposalSummaryPageWrapper />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/admin/funding-schemes" element={<FundingSchemeAdminPage />} />
+                    <Route path="/admin/global-library" element={<GlobalLibraryPage />} />
                     <Route path="/test-export" element={<TestExportPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
