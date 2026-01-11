@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Plus, Pencil, Search, Building2, Globe, Mail, Upload, Trash2, User, Phone } from 'lucide-react';
+import { Loader2, Plus, Pencil, Search, Building2, Globe, Mail, Upload, Trash2, User, Phone, SortAsc, SortDesc, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,8 @@ export function PartnersPage({ onEditPartner }: PartnersPageProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [partnerToDelete, setPartnerToDelete] = useState<{ id: string; name: string } | null>(null);
+    const [sortBy, setSortBy] = useState<'name' | 'newest'>('name');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
     useEffect(() => {
         loadPartners();
@@ -86,12 +88,28 @@ export function PartnersPage({ onEditPartner }: PartnersPageProps) {
         }
     };
 
-    const filteredPartners = partners.filter(partner =>
-        partner.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        partner.acronym?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        partner.country?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        partner.organizationType?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredPartners = partners
+        .filter(partner =>
+            partner.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            partner.acronym?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            partner.country?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            partner.organizationType?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .sort((a, b) => {
+            if (sortBy === 'name') {
+                const nameA = (a.name || '').toLowerCase();
+                const nameB = (b.name || '').toLowerCase();
+                return sortDirection === 'asc'
+                    ? nameA.localeCompare(nameB)
+                    : nameB.localeCompare(nameA);
+            }
+            if (sortBy === 'newest') {
+                const dateA = new Date(a.createdAt || 0).getTime();
+                const dateB = new Date(b.createdAt || 0).getTime();
+                return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+            }
+            return 0;
+        });
 
     if (loading) {
         return (
@@ -213,14 +231,43 @@ export function PartnersPage({ onEditPartner }: PartnersPageProps) {
                 </div>
             </div>
 
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    placeholder="Search by name, acronym, country, or type..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative max-w-sm w-full">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search partners..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 h-10 bg-card/50"
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground mr-2">Sort by:</span>
+                    <Button
+                        variant={sortBy === 'name' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => {
+                            if (sortBy === 'name') setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            else { setSortBy('name'); setSortDirection('asc'); }
+                        }}
+                        className={`h-9 gap-2 transition-all ${sortBy === 'name' ? 'bg-primary/20 text-primary border-primary/30' : ''}`}
+                    >
+                        {sortBy === 'name' ? (sortDirection === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4" />}
+                        Name
+                    </Button>
+                    <Button
+                        variant={sortBy === 'newest' ? 'secondary' : 'ghost'}
+                        size="sm"
+                        onClick={() => {
+                            if (sortBy === 'newest') setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                            else { setSortBy('newest'); setSortDirection('desc'); }
+                        }}
+                        className={`h-9 gap-2 transition-all ${sortBy === 'newest' ? 'bg-primary/20 text-primary border-primary/30' : ''}`}
+                    >
+                        {sortBy === 'newest' ? (sortDirection === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4" />}
+                        Date
+                    </Button>
+                </div>
             </div>
 
             {filteredPartners.length === 0 ? (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Check, AlertCircle, Briefcase, Star } from 'lucide-react';
+import { Search, Filter, Check, AlertCircle, Briefcase, Star, SortAsc, SortDesc, ArrowUpDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,8 @@ export function PartnerSelectionModal({ isOpen, onClose, onConfirm, selectedIdea
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [coordinatorId, setCoordinatorId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'relevance' | 'name' | 'newest'>('relevance');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     useEffect(() => {
         if (isOpen) {
@@ -136,10 +138,31 @@ export function PartnerSelectionModal({ isOpen, onClose, onConfirm, selectedIdea
         onConfirm(selected);
     };
 
-    const filteredPartners = partners.filter(p =>
-        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredPartners = partners
+        .filter(p =>
+            p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .sort((a, b) => {
+            if (sortBy === 'relevance') {
+                return sortDirection === 'desc'
+                    ? b.relevanceScore - a.relevanceScore
+                    : a.relevanceScore - b.relevanceScore;
+            }
+            if (sortBy === 'name') {
+                const nameA = (a.name || '').toLowerCase();
+                const nameB = (b.name || '').toLowerCase();
+                return sortDirection === 'asc'
+                    ? nameA.localeCompare(nameB)
+                    : nameB.localeCompare(nameA);
+            }
+            if (sortBy === 'newest') {
+                const dateA = new Date(a.createdAt || 0).getTime();
+                const dateB = new Date(b.createdAt || 0).getTime();
+                return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+            }
+            return 0;
+        });
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -151,14 +174,45 @@ export function PartnerSelectionModal({ isOpen, onClose, onConfirm, selectedIdea
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex items-center space-x-2 my-4">
-                    <Search className="w-4 h-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search partners..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="flex-1"
-                    />
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 my-4">
+                    <div className="relative max-w-sm w-full">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search partners..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10 h-10 bg-card/50"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Sort by:</span>
+                        <Button
+                            variant={sortBy === 'relevance' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => {
+                                if (sortBy === 'relevance') setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                else { setSortBy('relevance'); setSortDirection('desc'); }
+                            }}
+                            className={`h-9 gap-1 transition-all ${sortBy === 'relevance' ? 'bg-primary/20 text-primary border-primary/30' : ''}`}
+                            title="Sort by Relevance"
+                        >
+                            {sortBy === 'relevance' ? (sortDirection === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4" />}
+                            <span className="text-xs">Match</span>
+                        </Button>
+                        <Button
+                            variant={sortBy === 'name' ? 'secondary' : 'ghost'}
+                            size="sm"
+                            onClick={() => {
+                                if (sortBy === 'name') setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+                                else { setSortBy('name'); setSortDirection('asc'); }
+                            }}
+                            className={`h-9 gap-1 transition-all ${sortBy === 'name' ? 'bg-primary/20 text-primary border-primary/30' : ''}`}
+                            title="Sort by Name"
+                        >
+                            {sortBy === 'name' ? (sortDirection === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />) : <ArrowUpDown className="h-4 w-4" />}
+                            <span className="text-xs">A-Z</span>
+                        </Button>
+                    </div>
                 </div>
 
                 <ScrollArea className="flex-1 pr-4 -mr-4">
