@@ -200,30 +200,24 @@ function cleanHtml(html: string | undefined | null): string {
 function createSmartParagraph(text: string, options: { bullet?: number, allowedNames?: string[] } = {}): Paragraph | null {
   const line = formatContentText(text.trim());
 
-  // GLOBAL FILTER: If allowedNames is provided, check if the whole line is about a forbidden partner
+  // GLOBAL FILTER: Ensure we don't mention removed partners
   if (options.allowedNames && options.allowedNames.length > 0) {
     const lowerLine = line.toLowerCase();
 
-    // We only filter if the line strictly contains a partner identification pattern but no allowed name
-    // Example: "ASCOM Pavia (Associazione...)"
-    const partnerIdPattern = /^[A-Z][A-Za-z\s]{3,}.*?\(/;
-    if (partnerIdPattern.test(line)) {
-      const isAllowed = options.allowedNames.some(name => lowerLine.includes(name));
-      if (!isAllowed) {
-        console.log(`Global Filter: Skipping line about forbidden partner: ${line.substring(0, 50)}...`);
-        return null;
-      }
-    }
+    // Pattern 1: Paragraph starts with a likely partner name but it's not in our allowed list
+    // e.g., "ASCOM Pavia is...", "Learnmera Oy (OID...)"
+    const partnerStarts = line.match(/^([A-Z][A-Za-z0-9\s]{2,25})(?:\s|:|\()/);
+    if (partnerStarts) {
+      const name = partnerStarts[1].trim().toLowerCase();
+      // Filter out words that start sentences but aren't partner names
+      if (name.length > 3 && !['project', 'objective', 'summary', 'context', 'it', 'this', 'we', 'the'].includes(name)) {
+        const isAllowed = options.allowedNames.some(an => an.includes(name) || name.includes(an));
 
-    // Also catch lines starting with a colon (Property: Value) where the property is a partner name
-    const colonIndex = line.indexOf(':');
-    if (colonIndex > 0 && colonIndex < 40) {
-      const key = line.substring(0, colonIndex).toLowerCase();
-      // If it looks like a partner name but isn't allowed
-      const looksLikePartner = key.length > 4 && !key.includes(' ') && !['description', 'background', 'context', 'objective'].includes(key);
-      if (looksLikePartner) {
-        const isAllowed = options.allowedNames.some(name => key.includes(name) || name.includes(key));
-        if (!isAllowed) return null;
+        // If this line is clearly about a specific entity that is NOT allowed, kill it.
+        if (!isAllowed) {
+          console.log(`Global Filter: Stripping mention of forbidden entity "${name}"`);
+          return null;
+        }
       }
     }
   }
