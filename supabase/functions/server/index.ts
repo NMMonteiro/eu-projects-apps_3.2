@@ -36,6 +36,10 @@ const extractJSON = (text: string) => {
     }
 };
 
+const isUUID = (str: string) => {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
+
 const getSupabaseClient = () => {
     const url = Deno.env.get('SUPABASE_URL') || '';
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -983,17 +987,15 @@ Return ONLY valid JSON, no other text.`;
             const supabase = getSupabaseClient();
             let p = null;
 
-            // Only attempt DB query if ID looks like a UUID
-            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-            if (isUuid) {
+            // Try DB first if it's a UUID
+            if (isUUID(id)) {
                 const { data, error } = await supabase
                     .from('partners')
                     .select('*')
                     .eq('id', id)
-                    .single();
+                    .maybeSingle();
                 if (data) p = data;
-                if (error && error.code !== 'PGRST116') {
+                if (error) {
                     console.error('[PARTNER] DB Error:', error);
                 }
             }
@@ -1169,20 +1171,46 @@ Return ONLY valid JSON, no other text.`;
 
             console.log(`Updating partner ${id}:`, JSON.stringify(dbPartner).substring(0, 500));
 
-            const { error } = await supabase
-                .from('partners')
-                .update(dbPartner)
-                .eq('id', id);
+            if (isUUID(id)) {
+                const { error } = await supabase
+                    .from('partners')
+                    .update(dbPartner)
+                    .eq('id', id);
 
-            if (error) {
-                console.error(`Partner Update Error for ${id}:`, error);
-                throw error;
+                if (error) {
+                    console.error(`Partner Update Error for ${id}:`, error);
+                    throw error;
+                }
+
+                return new Response(
+                    JSON.stringify({ ...body, id }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+            } else {
+                // If not a UUID, this is a legacy/temp partner from KV
+                // We migrate it to Postgres by performing an INSERT
+                console.log(`Migrating KV partner ${id} to Postgres...`);
+
+                // Allow database to generate a new UUID
+                const { data, error } = await supabase
+                    .from('partners')
+                    .insert(dbPartner)
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error('Migration Insert Error:', error);
+                    throw error;
+                }
+
+                // Delete from KV after successful migration
+                await KV.del(`partner:${id}`);
+
+                return new Response(
+                    JSON.stringify({ ...body, id: data.id, createdAt: data.created_at, migratedFrom: id }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
             }
-
-            return new Response(
-                JSON.stringify({ ...body, id }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
         }
 
         // DELETE /partners/:id
@@ -1190,7 +1218,9 @@ Return ONLY valid JSON, no other text.`;
             const id = path.split('/').pop();
             const supabase = getSupabaseClient();
 
-            await supabase.from('partners').delete().eq('id', id);
+            if (isUUID(id)) {
+                await supabase.from('partners').delete().eq('id', id);
+            }
             await KV.del(`partner:${id}`); // Also delete from KV if it was there
 
             return new Response(
@@ -1231,19 +1261,23 @@ Return ONLY valid JSON, no other text.`;
                 .from('partner-assets')
                 .getPublicUrl(fileName);
 
-            // Update partner record
-            const { error: dbError } = await supabase
-                .from('partners')
-                .update({ logo_url: publicUrl })
-                .eq('id', id);
+            // Update partner record if it's a UUID
+            if (isUUID(id)) {
+                const { error: dbError } = await supabase
+                    .from('partners')
+                    .update({ logo_url: publicUrl })
+                    .eq('id', id);
 
-            if (dbError) {
-                // Fallback to KV if DB fails (e.g. if it's a legacy KV partner)
-                const partner = await KV.get(`partner:${id}`);
-                if (partner) {
-                    partner.logoUrl = publicUrl;
-                    await KV.set(`partner:${id}`, partner);
+                if (dbError) {
+                    console.error('Logo DB update error:', dbError);
                 }
+            }
+
+            // Always check KV for legacy compatibility
+            const partner = await KV.get(`partner:${id}`);
+            if (partner) {
+                partner.logoUrl = publicUrl;
+                await KV.set(`partner:${id}`, partner);
             }
 
             return new Response(
@@ -1284,19 +1318,23 @@ Return ONLY valid JSON, no other text.`;
                 .from('partner-assets')
                 .getPublicUrl(fileName);
 
-            // Update partner record
-            const { error: dbError } = await supabase
-                .from('partners')
-                .update({ pdf_url: publicUrl })
-                .eq('id', id);
+            // Update partner record if it's a UUID
+            if (isUUID(id)) {
+                const { error: dbError } = await supabase
+                    .from('partners')
+                    .update({ pdf_url: publicUrl })
+                    .eq('id', id);
 
-            if (dbError) {
-                // Fallback to KV
-                const partner = await KV.get(`partner:${id}`);
-                if (partner) {
-                    partner.pdfUrl = publicUrl;
-                    await KV.set(`partner:${id}`, partner);
+                if (dbError) {
+                    console.error('PDF DB update error:', dbError);
                 }
+            }
+
+            // Always check KV for legacy compatibility
+            const partner = await KV.get(`partner:${id}`);
+            if (partner) {
+                partner.pdfUrl = publicUrl;
+                await KV.set(`partner:${id}`, partner);
             }
 
             return new Response(
