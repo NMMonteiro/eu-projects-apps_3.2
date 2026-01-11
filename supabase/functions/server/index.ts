@@ -1107,11 +1107,9 @@ Return ONLY valid JSON, no other text.`;
                 relevant_projects: body.relevantProjects
             };
 
-            console.log('Inserting partner:', JSON.stringify(dbPartner).substring(0, 500));
-
             const { data, error } = await supabase
                 .from('partners')
-                .insert(dbPartner)
+                .upsert(dbPartner, { onConflict: 'name' })
                 .select()
                 .single();
 
@@ -1194,15 +1192,15 @@ Return ONLY valid JSON, no other text.`;
                 // We migrate it to Postgres by performing an INSERT
                 console.log(`Migrating KV partner ${id} to Postgres...`);
 
-                // Allow database to generate a new UUID
+                // Use upsert to handle cases where the partner name already exists in Postgres
                 const { data, error } = await supabase
                     .from('partners')
-                    .insert(dbPartner)
+                    .upsert(dbPartner, { onConflict: 'name' })
                     .select()
                     .single();
 
                 if (error) {
-                    console.error('Migration Insert Error:', error);
+                    console.error('Migration Upsert Error:', error);
                     throw error;
                 }
 
