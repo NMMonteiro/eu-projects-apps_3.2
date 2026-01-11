@@ -21,8 +21,8 @@ const normalize = (s: string) => (s || "").toLowerCase().replace(/[\W_]/g, '');
  */
 function extractWPIndex(text: string): number | undefined {
     if (!text) return undefined;
-    // Enhanced regex to handle underscores: "work_package_2", "WP_2", etc.
-    const match = text.match(/\b(?:Work[\s_]*Packages?|WP[_\s]*|WorkPlan)\s*(?:n°|no\.?|#|number)?\s*(\d+)\b/i);
+    // Handle ALL variations: "work_package_2", "WP_2", "Work package-3", "WorkPlan1", etc.
+    const match = text.match(/\b(?:Work|WP|WorkPlan)[\s_-]*(?:Packages?|Plan)?[\s_-]*(?:n°|no\.?|#|number)?[\s_-]*(\d+)\b/i);
     if (match) return parseInt(match[1]) - 1;
     return undefined;
 }
@@ -37,8 +37,8 @@ function cleanTitle(title: string): string {
     let t = title.replace(/undefined/gi, '').replace(/\(?\s*null\s*\)?/gi, '').replace(/-\s*null/gi, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
     t = t.replace(/\s*-\s*$/, '');
 
-    // 2. EXTREME Regex for prefixes like "WP1:", "WP 1:", "Work Package 1 -", etc.
-    const wpPrefixRegex = /^(?:WP\s*\d+|Work\s*Package\s*(?:n°|no\.?|#)?\s*\d+)\s*[:\.-]*/i;
+    // 2. EXTREME Regex for prefixes like "WP1:", "WP 1:", "Work Package 1 -", "work_package_1", etc.
+    const wpPrefixRegex = /^(?:WP|Work[\s_-]*Packages?|Work[\s_-]*Plan)[\s_-]*(?:n°|no\.?|#|number)?[\s_-]*\d+\s*[:\.-]*/i;
 
     // Strip recursively to handle "WP1: WP1: ..."
     let safety = 0;
