@@ -157,44 +157,66 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         }
     });
 
-    // 3. Merge Dynamic content & Legacy Fields
-    const allContentSource: Record<string, any> = { ...dynamicSections };
-    // Add legacy fields if they have content
-    const legacyFields = ['introduction', 'relevance', 'methods', 'impact', 'objectives', 'methodology', 'expectedResults', 'innovation', 'sustainability', 'consortium', 'workPlan', 'riskManagement', 'dissemination'];
-    legacyFields.forEach(f => {
-        if ((proposal as any)[f] && (proposal as any)[f].length > 10) {
-            allContentSource[f] = (proposal as any)[f];
+    // 3. UNIVERSAL MERGE: Merge ANY available string property from proposal or dynamicSections
+    const allContentSource: Record<string, string> = { ...dynamicSections };
+
+    // Scan dynamic sections first
+    Object.entries(dynamicSections).forEach(([k, v]) => {
+        if (v && typeof v === 'string' && v.length > 5) allContentSource[k] = v;
+    });
+
+    // Scan top-level proposal fields for any non-null strings (excluding internal keys)
+    const excludeKeys = ['id', 'title', 'summary', 'fundingSchemeId', 'layoutId', 'projectUrl', 'generatedAt', 'savedAt', 'updatedAt', 'generationPrompt'];
+    Object.entries(proposal).forEach(([k, v]) => {
+        if (!excludeKeys.includes(k) && v && typeof v === 'string' && v.length > 5) {
+            allContentSource[k] = v;
         }
     });
 
     Object.entries(allContentSource).forEach(([key, val]) => {
-        if (!val || typeof val !== 'string' || val.length < 5) return;
         const nk = normalize(key);
-        if (['summary', 'budget', 'partners', 'risks'].some(x => nk.includes(x))) return;
+        // Skip keys that are handled by structured tables
+        if (['summary', 'budget', 'partners', 'risks', 'layout', 'settings', 'workpackages', 'work_packages'].some(x => nk.includes(x))) return;
 
         const wpIdx = extractWPIndex(key);
         let target = wpIdx !== undefined ? wpIdxToPoolKey.get(wpIdx) : normTitleToPoolKey.get(nk);
 
         if (!target) {
+            // Fuzzy match search
             for (const [pK, pV] of sectionPool.entries()) {
                 const pn = normalize(pV.title);
-                if (normalize(pK).includes(nk) || nk.includes(normalize(pK)) || pn.includes(nk) || nk.includes(pn)) {
+                const kn = normalize(pK);
+
+                if (kn.includes(nk) || nk.includes(kn) || pn.includes(nk) || nk.includes(pn)) {
                     target = pK;
                     break;
                 }
+
+                // Special mapping for Erasmus+ specific common patterns
+                if (nk === 'objectives' && pn.includes('objective')) { target = pK; break; }
+                if (nk === 'relevance' && pn.includes('needsanalysis')) { target = pK; break; }
+                if (nk === 'activities' && pn.includes('activity')) { target = pK; break; }
+                if (nk === 'quality' && pn.includes('qualitystandards')) { target = pK; break; }
             }
         }
 
         if (target) {
             const s = sectionPool.get(target)!;
-            if (!s.content || val.length > s.content.length) s.content = val;
-            else if (!s.content.includes(val.substring(0, 30))) s.content += "\n\n" + val;
+            // Only update if current content is shorter or empty
+            if (!s.content || val.length > s.content.length) {
+                s.content = val;
+            } else if (!s.content.toLowerCase().includes(val.substring(0, 20).toLowerCase())) {
+                s.content += "\n\n" + val;
+            }
         } else {
-            sectionPool.set(key, {
-                id: key,
-                title: wpIdx !== undefined ? formatWPTitle(wpIdx, key) : (cleanTitle(key) || key),
-                content: val, level: 1, wpIdx: wpIdx, order: getPriority(key)
-            });
+            // Only if it doesn't look like internal data
+            if (key.length > 3 && !key.startsWith('_')) {
+                sectionPool.set(`custom_${key}`, {
+                    id: `custom_${key}`,
+                    title: wpIdx !== undefined ? formatWPTitle(wpIdx, key) : (cleanTitle(key) || key),
+                    content: val, level: 1, wpIdx: wpIdx, order: getPriority(key)
+                });
+            }
         }
     });
 
@@ -203,12 +225,17 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
     if (coord) {
         for (const [pk, s] of sectionPool.entries()) {
             const nl = normalize(s.title);
-            const isBackground = nl === 'background' || nl === 'organisationalbackground' || nl.includes('backgroundandexperience');
+            const isBackground = nl === 'background' || nl === 'organisationalbackground' || nl.includes('backgroundandexperience') || nl.includes('organisationprofiles');
+            // If it's a background section and still empty, populate it
             if (isBackground && (!s.content || s.content.length < 50)) {
-                const bgContent = [coord.description, coord.experience].filter(Boolean).join("\n\n");
-                if (bgContent.length > 50) {
-                    s.content = bgContent;
-                    console.log(`Populated ${s.title} from Coordinator data`);
+                const bgParts = [
+                    coord.description || (coord as any).background,
+                    coord.experience || (coord as any).organisation_experience
+                ].filter(Boolean);
+
+                if (bgParts.length > 0) {
+                    s.content = bgParts.join("\n\n");
+                    console.log(`Populated empty background section "${s.title}" from Coordinator data`);
                 }
             }
         }
@@ -271,8 +298,8 @@ export function assembleDocument(proposal: FullProposal): DisplaySection[] {
         // Always show structured data sections
         if (['wp_list', 'partners', 'budget', 'risk', 'work_package', 'partner_profiles'].includes(type)) return true;
 
-        // Show all level 1 sections (headers) even if empty
-        if (s.level === 1) return true;
+        // Show all level 1 and level 2 sections (headers) even if empty
+        if (s.level <= 2) return true;
 
         // For others, only show if they have real content
         return !!(s.content && s.content.trim().length > 10);
